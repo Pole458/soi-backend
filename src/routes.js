@@ -1,156 +1,122 @@
 'use strict';
 
-function sequencer() {
-    let i = 1;
-    return function () {
-        const n = i;
-        i++;
-        return n;
-    }
-}
+const { db } = require('./db');
+const {sha256} = require('crypto-hash');
 
-class Task {
-    constructor(id, description) {
-        this._id = id;
-        this._description = description;
-        this._timestamp = new Date();
-    }
-
-    //@formatter:off
-    get id() { return this._id; }
-    get description() { return this._description; }
-    set description(description) { this._description = description; }
-    get timestamp() { return this._timestamp; }
-    //@formatter:on
-}
-
-const seq = sequencer();
-const tasks = [];
-
-for (let i = 0; i < 5; i++) {
-    const id = seq();
-    tasks.push(new Task(id, `Spend more time hacking #${id}`));
-}
-
-function toDTO(task) {
-    return {
-        id: task.id,
-        description: task.description,
-        timestamp: task.timestamp // should be converted according to ISO8601
-    };
+async function generateToken(username, password) {
+	const now = Date.now();
+	const hash = await sha256(username + password + now);
+	return {
+		username: username,
+		time: now,
+		hash: hash,
+	};
 }
 
 function isNonBlank(str) {
-    return typeof str === 'string' && str.trim();
+	return typeof str === 'string' && str.trim();
 }
 
 function isInteger(n) {
-    if (typeof n === 'number') {
-        return true;
-    }
-    if (typeof n === 'string') {
-        try {
-            parseInt(n, 10);
-            return true;
-        } catch (_) {
-            return false;
-        }
-    }
-    return false;
+	if (typeof n === 'number') {
+		return true;
+	}
+	if (typeof n === 'string') {
+		try {
+			parseInt(n, 10);
+			return true;
+		} catch (_) {
+			return false;
+		}
+	}
+	return false;
 }
 
 function routes(app) {
 
-    app.get('/tasks', (req, resp) => {
-        console.debug('Retrieving all tasks');
+	app.post('/signin', async (req, resp) => {
+		
+		const { username, password } = req.body;
 
-        const objects = tasks.map(toDTO);
-        resp.json({
-            total: objects.length,
-            results: objects
-        });
-    });
+		// Check if user is already registered
+		if(await db.isUserRegistered(username)) {
+			resp.status(400);
+			resp.json({error: "Username is already registered"});
+			return;
+		}
 
-    app.post('/task', (req, resp) => {
-        const {description} = req.body;
-        console.debug('Attempting to crete a new task', {description});
+		// Generate token
+		const token = await generateToken(username, password);
 
-        if (!isNonBlank(description)) {
-            resp.status(400);
-            resp.json({error: 'Missing task description'});
-            return;
-        }
-        if (description.trim().length > 50) {
-            resp.status(400);
-            resp.json({error: 'Too long task description'});
-            return;
-        }
+		// Register user
+		await db.registerUser(username, password, token);
 
-        const task = new Task(seq(), description.trim());
-        tasks.push(task);
-        console.info('Task successfully created', {task});
+		resp.json({token: token});
+		resp.status(200);
+	});
 
-        resp.status(201);
-        resp.json(toDTO(task));
-    });
+	app.post('/login', async (req, resp) => {
 
-    app.put('/task/:id', (req, resp) => {
-        const {description} = req.body;
-        const idRaw = req.params.id;
-        console.debug('Attempting to update task', {id: idRaw, description});
+		const { username, password } = req.body;
 
-        if (!isNonBlank(description)) {
-            resp.status(400);
-            resp.json({error: 'Missing task description'});
-            return;
-        }
-        if (description.trim().length > 50) {
-            resp.status(400);
-            resp.json({error: 'Too long task description'});
-            return;
-        }
-        if (!isInteger(idRaw)) {
-            resp.status(400);
-            resp.json({error: 'Invalid task identifier'});
-            return;
-        }
-        const id = parseInt(idRaw, 10);
-        const task = tasks.find(t => t.id === id);
-        if (!task) {
-            resp.status(404);
-            resp.json({error: 'Task not found'});
-            return;
-        }
+		// Check if user is registered
+		if(!(await db.isUserRegistered(username))) {
+			resp.status(400);
+			resp.json({error: "Username is not registered"});
+			return;
+		}
 
-        task.description = description.trim();
-        resp.status(200);
-        console.info('Task successfully updated', {task});
+		// Get password for username
+		const storedPassword = await db.getUserPassword(username);
 
-        resp.json(toDTO(task));
-    });
+		// If passwords don't match, the sumbitted password is wrong
+		if(storedPassword != password) {
+			console.debug(storedPassword + ' ' + password)
+			resp.status(401);
+			resp.json({error: "Password is wrong"});
+			return;
+		}
 
-    app.delete('/task/:id', (req, resp) => {
-        const idRaw = req.params.id;
-        console.debug('Attempting to delete task', {id: idRaw});
+		// Generate token
+		const token = await generateToken(username, password);
 
-        if (!isInteger(idRaw)) {
-            resp.status(400);
-            resp.json({error: 'Invalid task identifier'});
-            return;
-        }
-        const id = parseInt(idRaw, 10);
-        const j = tasks.findIndex(t => t.id === id);
-        if (j < 0) {
-            resp.status(404);
-            resp.json({error: 'Task not found'});
-            return;
-        }
-        const [task] = tasks.splice(j, 1);
+		// Update token in database
+		await db.updateToken(token)
+	
+		resp.status(200);
+		resp.json({token: token})
+	});
 
-        console.info('Task successfully deleted', {task});
-        resp.status(200);
-        resp.json(toDTO(task));
-    });
+	app.get('/users', async (req, resp) => {
+
+		// const { token } = req.body;
+
+		// // Check token integrity
+		// if(!token || !token.username || !token.time || !token.hash) {
+		// 	resp.status(400);
+		// 	resp.json({error: "Token is not valid"})
+		// 	return;
+		// }
+
+		// // Check token expiration date (1 day)
+		// if(token.time + 24*3600*1000 < Date.now()) {
+		// 	resp.status(401);
+		// 	resp.json({error: "Token is expired"})
+		// 	return;
+		// }
+
+		// // Check token hash
+		// const storedTokenHash = await db.getTokenHash(token.username);
+
+		// if(storedTokenHash != token.hash) {
+		// 	resp.status(401);
+		// 	resp.json({error: "Token is not valid"})
+		// 	return;
+		// }
+
+		resp.status(200);
+		resp.json({users: await db.getUsers()});
+	})
 }
 
-module.exports = {routes};
+module.exports = { routes };

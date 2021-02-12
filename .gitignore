@@ -55,3 +55,6 @@ Thumbs.db
 *.tar
 
 /keys/public.json
+
+# SQLite3 db
+*.sqlite

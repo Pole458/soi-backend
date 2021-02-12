@@ -11,6 +11,14 @@ const methodOverride = require('method-override');
 const bodyParser = require('body-parser');
 const compression = require('compression');
 
+// Knex
+const knex = require('knex')({
+	client: 'sqlite3',
+	connection: {
+		filename: "./soi-backend-db.sqlite"
+	}
+});
+
 // own modules
 const opts = require('./options');
 const { routes } = require('./routes');
@@ -25,8 +33,7 @@ const options = opts();
  * @returns {void}
  */
 function init(app) {
-    
-    app.use(compression());
+	app.use(compression());
 	app.use(methodOverride());
 	app.use(bodyParser.json());
 	app.use(bodyParser.urlencoded({ extended: true }));
@@ -36,7 +43,7 @@ function init(app) {
 		req.correlationId = req.get('X-Request-ID') || uuid();
 		res.set('X-Request-ID', req.id);
 		next();
-    });
+	});
 }
 
 /**
