@@ -10,6 +10,7 @@ const express = require('express');
 const methodOverride = require('method-override');
 const bodyParser = require('body-parser');
 const compression = require('compression');
+const cookieParser = require('cookie-parser');
 
 // own modules
 const opts = require('./options');
@@ -69,6 +70,7 @@ function fallbacks(app) {
 }
 
 const app = express();
+app.use(cookieParser());
 init(app);
 routes(app);
 fallbacks(app);

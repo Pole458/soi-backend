@@ -12,6 +12,8 @@ const knex = require('knex')({
 const db = {};
 
 db.init = async () => {
+
+	// Create table User (if not exists)
 	if(!(await knex.schema.hasTable("user"))) {
 		await knex.schema.createTable('user', table => {
 			table.string('username').primary();
@@ -19,7 +21,29 @@ db.init = async () => {
 			table.time('token_time');
 			table.string('token_hash');
 		}).asCallback(()=>{});
-	}
+	};
+
+	// Create table Project (if not exists)
+	if(!(await knex.schema.hasTable("project"))) {
+		await knex.schema.createTable("project", table => {
+			table.string("title").primary();
+		}).asCallback(()=>{});
+	};
+
+	// Create table Dataset (if not exists)
+	if(!(await knex.schema.hasTable("dataset"))) {
+		await knex.schema.createTable("dataset", table => {
+			table.increments("id").primary();
+		}).asCallback(()=>{});
+	};
+
+	// Create table Record (if not exists)
+	if(!(await knex.schema.hasTable("record"))) {
+		await knex.schema.createTable("record", table => {
+			table.string("input")
+		}).asCallback(()=>{});
+	};
+
 
 	console.debug("DB ready");
 }
@@ -49,8 +73,7 @@ db.updateToken = async (token) => {
 // May return undefined if the username is not registered
 db.getTokenHash = async (username) => {
 	const q = await knex.from('user').select('token_hash').where({username: username});
-	console.debug(q);
-	if(q) return q.token_hash;
+	if(q && q[0]) return q[0].token_hash;
 	return undefined;
 }
 
@@ -62,7 +85,6 @@ db.registerUser = async (username, password, token) => {
 		token_time: token.time
 	})
 }
-
 
 db.getUsers = async () => {
 	return await knex.from('user'); //.select('username');
