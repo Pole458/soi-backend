@@ -90,6 +90,22 @@ db.getUsers = async () => {
 	return await knex.from('user'); //.select('username');
 }
 
+db.getProjects = async () => {
+	return [
+		{title: "Project 1"},
+		{title: "Project 2"},
+		{title: "Project 3"},
+		{title: "Project 4"}
+	]
+}
+
+db.getProject = async (title) => {
+	return {
+		title: title,
+		info: "info about " + title
+	};
+}
+
 db.init();
 
 module.exports = { db };
