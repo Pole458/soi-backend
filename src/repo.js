@@ -9,9 +9,12 @@ const knex = require('knex')({
 	asyncStackTraces: true // only for debug
 });
 
-const db = {};
+/**
+ * JSON object containing Repository helper methods.
+ */
+const repo = {};
 
-db.init = async () => {
+repo.init = async () => {
 
 	// Create table User (if not exists)
 	if(!(await knex.schema.hasTable("user"))) {
@@ -49,19 +52,19 @@ db.init = async () => {
 }
 
 
-db.isUserRegistered = async (username) => {
+repo.isUserRegistered = async (username) => {
 	const q = await knex('user').where({username: username});
 	return q.length > 0;
 }
 
 // May return undefined if the username is not registered
-db.getUserPassword = async (username) => {
+repo.getUserPassword = async (username) => {
 	const q = (await knex.from('user').select('password').where({username: username}))[0];
 	if(q) return q.password;
 	return undefined;
 }
 
-db.updateToken = async (token) => {
+repo.updateToken = async (token) => {
 	await knex('user')
 	.where({username: token.username})
 	.update({
@@ -71,13 +74,13 @@ db.updateToken = async (token) => {
 }
 
 // May return undefined if the username is not registered
-db.getTokenHash = async (username) => {
+repo.getTokenHash = async (username) => {
 	const q = await knex.from('user').select('token_hash').where({username: username});
 	if(q && q[0]) return q[0].token_hash;
 	return undefined;
 }
 
-db.registerUser = async (username, password, token) => {
+repo.registerUser = async (username, password, token) => {
 	await knex('user').insert({
 		username: username,
 		password: password,
@@ -86,11 +89,11 @@ db.registerUser = async (username, password, token) => {
 	})
 }
 
-db.getUsers = async () => {
+repo.getUsers = async () => {
 	return await knex.from('user'); //.select('username');
 }
 
-db.getProjects = async () => {
+repo.getProjects = async () => {
 	return [
 		{title: "Project 1"},
 		{title: "Project 2"},
@@ -99,13 +102,13 @@ db.getProjects = async () => {
 	]
 }
 
-db.getProject = async (title) => {
+repo.getProject = async (title) => {
 	return {
 		title: title,
 		info: "info about " + title
 	};
 }
 
-db.init();
+repo.init();
 
-module.exports = { db };
+module.exports = { repo };

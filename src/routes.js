@@ -1,6 +1,6 @@
 'use strict';
 
-const { db } = require('./db');
+const { repo } = require('./repo');
 const {sha256} = require('crypto-hash');
 
 /**
@@ -44,7 +44,7 @@ async function checkToken(token) {
 	}
 
 	// Check token hash
-	const storedTokenHash = await db.getTokenHash(token.username);
+	const storedTokenHash = await repo.getTokenHash(token.username);
 	if(storedTokenHash != token.hash) {
 		return false;
 	}
@@ -120,7 +120,7 @@ function routes(app) {
 		}
 
 		// Check if user is already registered
-		if(await db.isUserRegistered(username)) {
+		if(await repo.isUserRegistered(username)) {
 			resp.status(400);
 			resp.json({error: "Username is already registered"});
 			return;
@@ -130,7 +130,7 @@ function routes(app) {
 		const token = await generateToken(username, password);
 
 		// Register new user (with token)
-		await db.registerUser(username, password, token);
+		await repo.registerUser(username, password, token);
 
 		resp.status(200);
 		setTokenCookie(resp, token);
@@ -154,14 +154,14 @@ function routes(app) {
 		}
 
 		// Check if user is registered
-		if(!(await db.isUserRegistered(username))) {
+		if(!(await repo.isUserRegistered(username))) {
 			resp.status(400);
 			resp.json({error: "Username is not registered"});
 			return;
 		}
 
 		// Get stored password for username
-		const storedPassword = await db.getUserPassword(username);
+		const storedPassword = await repo.getUserPassword(username);
 
 		// If passwords don't match, the sumbitted password is wrong
 		if(storedPassword != password) {
@@ -174,7 +174,7 @@ function routes(app) {
 		const token = await generateToken(username, password);
 
 		// Update token in database
-		await db.updateToken(token)
+		await repo.updateToken(token)
 	
 		resp.status(200);
 		setTokenCookie(resp, token);
@@ -197,9 +197,9 @@ function routes(app) {
 		}
 
 		// Renew token
-		token = await generateToken(token.username, await db.getUserPassword(token.username));
+		token = await generateToken(token.username, await repo.getUserPassword(token.username));
 		// Update token in database
-		await db.updateToken(token)
+		await repo.updateToken(token)
 		
 		resp.status(200);
 		setTokenCookie(resp, token);
@@ -211,11 +211,11 @@ function routes(app) {
 
 		if(await checkToken(token)) {
 			resp.status(200);
-			resp.json({projects: await db.getProjects()});
+			resp.json({projects: await repo.getProjects()});
 		} else {
 			resp.status(401);
 			resp.clearCookie("token");
-			resp.json({projects: await db.getProjects(), error: "Token is not valid"});
+			resp.json({projects: await repo.getProjects(), error: "Token is not valid"});
 		}
 	});
 
@@ -227,11 +227,11 @@ function routes(app) {
 
 		if(await checkToken(token)) {
 			resp.status(200);
-			resp.json({project: await db.getProject(title)});
+			resp.json({project: await repo.getProject(title)});
 		} else {
 			resp.status(401);
 			resp.clearCookie("token");
-			resp.json({projects: await db.getProject(title), error: "Token is not valid"});
+			resp.json({projects: await repo.getProject(title), error: "Token is not valid"});
 		}
 	});
 
@@ -241,11 +241,11 @@ function routes(app) {
 
 		if(await checkToken(token)) {
 			resp.status(200);
-			resp.json({users: await db.getUsers()});
+			resp.json({users: await repo.getUsers()});
 		} else {
 			resp.status(401);
 			resp.clearCookie("token");
-			resp.json({users: await db.getUsers(), error: "Token is not valid"});
+			resp.json({users: await repo.getUsers(), error: "Token is not valid"});
 		}
 	});
 }
