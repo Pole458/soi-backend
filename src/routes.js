@@ -2,6 +2,7 @@
 
 const { repo } = require('./repo');
 const {sha256} = require('crypto-hash');
+const { response } = require('express');
 
 /**
  * Max age for a token. Currently one day
@@ -235,6 +236,65 @@ function routes(app) {
 			resp.clearCookie("token");
 			resp.json({projects: await repo.getProject(title), error: "Token is not valid"});
 		}
+	});
+
+	app.get("/tags", async (req, resp) => {
+
+		const { title } = req.body;
+
+		resp.status(200);
+		resp.json([
+			{
+				tag: "species",
+				values: [
+					"Lion",
+					"Zebra",
+					"Giraffe",
+					"Donphan"
+				]
+			},
+			{
+				tag: "colors",
+				values: [
+					"Red", "Blue", "Green"
+				]
+			}
+		]);
+	});
+
+	app.get("/records", async (req, resp) => {
+
+		const { title } = req.body;
+
+		resp.status(200);
+		resp.json([
+			{
+				input: "Immagine di un pikachu",
+				tags: [
+					{
+						tag: "Type",
+						values: " electric"
+					},
+					{
+						tag: "Species",
+						values: "Lion"
+					}
+				]
+			},
+			{
+				input: "Immagine di un Leone vero",
+				tags: [
+					{
+						tag: "Type",
+						values: "Water"
+					},
+					{
+						tag: "Species",
+						values: "Pikachu"
+					}
+				]
+			},
+		]);
 	});
 
 	app.get('/users', async (req, resp) => {
