@@ -27,6 +27,8 @@ async function generateToken(username, password) {
 	};
 }
 
+//ciao
+
 /**
  * Check if the token is valid
  * @param {object} token should be a json object containing {username, time, hash}

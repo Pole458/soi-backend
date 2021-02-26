@@ -19,6 +19,8 @@ const { routes } = require('./routes');
 // creates the configuration options and the logger
 const options = opts();
 
+//commento
+
 /**
  * Initializes the application middlewares.
  *
