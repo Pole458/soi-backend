@@ -1,112 +1,232 @@
 'use strict'
 
-const knex = require('knex')({
-	client: 'sqlite3',
-	connection: {
-		filename: "./soi-backend-db.sqlite"
-	},
-	useNullAsDefault: true,
-	asyncStackTraces: true // only for debug
-});
+const testing = true;
+
+const loki = require('lokijs');
+
+const db = new loki("test.json");
 
 /**
  * JSON object containing Repository helper methods.
  */
 const repo = {};
 
-repo.init = async () => {
+repo.init = () => {
 
-	// Create table User (if not exists)
-	if(!(await knex.schema.hasTable("user"))) {
-		await knex.schema.createTable('user', table => {
-			table.string('username').primary();
-			table.string('password');
-			table.time('token_time');
-			table.string('token_hash');
-		}).asCallback(()=>{});
-	};
+	db.users = db.addCollection("users", {
+		unique: ['username'],
+		indices: ["username"]
+	});
 
-	// Create table Project (if not exists)
-	if(!(await knex.schema.hasTable("project"))) {
-		await knex.schema.createTable("project", table => {
-			table.string("title").primary();
-		}).asCallback(()=>{});
-	};
+	db.projects = db.addCollection("projects", {
+		unique: ["title"],
+		indices: ["title"]
+	});
 
-	// Create table Dataset (if not exists)
-	if(!(await knex.schema.hasTable("dataset"))) {
-		await knex.schema.createTable("dataset", table => {
-			table.increments("id").primary();
-		}).asCallback(()=>{});
-	};
+	db.records = db.addCollection("records", {
+		indices: ["project_id"]
+	});
 
-	// Create table Record (if not exists)
-	if(!(await knex.schema.hasTable("record"))) {
-		await knex.schema.createTable("record", table => {
-			table.string("input")
-		}).asCallback(()=>{});
-	};
-
+	if (testing) {
+		repo.fillForTesting();
+	}
 
 	console.debug("DB ready");
 }
 
+repo.fillForTesting = () => {
 
-repo.isUserRegistered = async (username) => {
-	const q = await knex('user').where({username: username});
-	return q.length > 0;
+	const project_id = repo.insertProject("Pokemon").$loki;
+
+	repo.addTagToProject(project_id, "Type");
+
+	repo.addTagValueToProject(project_id, "Type", "Grass");
+	repo.addTagValueToProject(project_id, "Type", "Water");
+	repo.addTagValueToProject(project_id, "Type", "Fire");
+
+	repo.insertRecord(project_id, "Bulbasaur");
+	repo.insertRecord(project_id, "Charmander");
+	const record_id = repo.insertRecord(project_id, "Squirtle").$loki;
+
+	repo.setTagToRecord(record_id, "Region", "Kanto");
+	repo.setTagToRecord(record_id, "Type", "Water");
+}
+
+repo.isUserRegistered = (username) => {
+	const q = db.users.findOne({ username: username });
+	return q ? true : false;
 }
 
 // May return undefined if the username is not registered
-repo.getUserPassword = async (username) => {
-	const q = (await knex.from('user').select('password').where({username: username}))[0];
-	if(q) return q.password;
-	return undefined;
+repo.getUserPassword = (username) => {
+	const q = db.users.findOne({ username: username });
+	return q ? q.password : undefined;
 }
 
-repo.updateToken = async (token) => {
-	await knex('user')
-	.where({username: token.username})
-	.update({
+repo.updateToken = (token) => {
+	db.users.chain().find({
+		username: token.username
+	}).update(user => {
+		user.token_hash = token.hash;
+		user.token_time = token.time;
+	});
+}
+
+// Returns undefined if the username is not registered
+repo.getTokenHash = (username) => {
+	const q = db.users.findOne({ username: username });
+	return q ? q.token_hash : undefined;
+}
+
+repo.insertUser = (username, password, token) => {
+	db.users.insert({
+		username: username,
+		password: password,
 		token_hash: token.hash,
 		token_time: token.time
 	});
 }
 
-// May return undefined if the username is not registered
-repo.getTokenHash = async (username) => {
-	const q = await knex.from('user').select('token_hash').where({username: username});
-	if(q && q[0]) return q[0].token_hash;
-	return undefined;
+repo.getUser = (id) => {
+
+	const user = db.users.get(id);
+
+	if (user) {
+		return {
+			id: user.$loki,
+			username: user.username,
+		};
+	}
+
+	return null;
 }
 
-repo.registerUser = async (username, password, token) => {
-	await knex('user').insert({
-		username: username,
-		password: password,
-		token_hash: token.hash,
-		token_time: token.time
-	})
+repo.getUsers = () => {
+	return db.users.chain().map(user => {
+		return {
+			id: user.$loki,
+			username: user.username
+		}
+	}).data({ removeMeta: true });
 }
 
-repo.getUsers = async () => {
-	return await knex.from('user'); //.select('username');
-}
 
-repo.getProjects = async () => {
-	return [
-		{title: "Project 1"},
-		{title: "Project 2"},
-		{title: "Project 3"},
-		{title: "Project 4"}
-	]
-}
-
-repo.getProject = async (title) => {
-	return {
+repo.insertProject = (title) => {
+	return db.projects.insert({
 		title: title,
-		info: "info about " + title
-	};
+		tags: [],
+	});
+}
+
+
+repo.getProject = (id) => {
+
+	const project = db.projects.get(id);
+
+	if (project) {
+		return {
+			id: project.$loki,
+			title: project.title,
+			tags: project.tags
+		}
+	}
+
+	return null;
+}
+
+repo.getProjects = () => {
+	return db.projects.chain().map(project => {
+		return {
+			id: project.$loki,
+			title: project.title
+		}
+	}).data({ removeMeta: true });
+}
+
+
+repo.addTagToProject = (project_id, tag_name) => {
+	db.projects.chain().find({
+		$loki: project_id,
+	}).update(project => {
+		if (!(project.tags.some(tag => tag.name === tag_name))) {
+			project.tags.push({
+				name: tag_name,
+				values: []
+			})
+		}
+	});
+}
+
+repo.addTagValueToProject = (project_id, tag_name, tag_value) => {
+	db.projects.chain().find({
+		$loki: project_id,
+	}).update(project => {
+		for (const tag of project.tags) {
+			if (tag.name === tag_name) {
+				tag.values.push(tag_value);
+				break;
+			}
+		}
+	});
+}
+
+repo.insertRecord = (project_id, input) => {
+	return db.records.insert({
+		project_id: project_id,
+		input: input,
+		tags: []
+	});
+}
+
+
+repo.getRecord = (id) => {
+	const record = db.records.get(id);
+
+	if (record) {
+		return {
+			id: record.$loki,
+			project_id: record.project_id,
+			input: record.input,
+			tags: record.tags
+		}
+	}
+
+	return null;
+}
+
+repo.getProjectRecords = (project_id) => {
+	return db.records.chain().find({
+		project_id: project_id
+	}).map(record => {
+		return {
+			id: record.$loki,
+			input: record.input,
+			project_id: record.project_id,
+			tags: record.tags
+		}
+	}).data({ removeMeta: true });
+}
+
+repo.setTagToRecord = (record_id, tag_name, tag_value) => {
+	db.records.chain().find({
+		$loki: record_id,
+	}, true).update(record => {
+		let b = false;
+		for (const tag of record.tags) {
+			if (tag.name === tag_name) {
+				tag.value = tag_value;
+				b = true;
+				break;
+			}
+		}
+
+		if (!b) {
+			record.tags.push({
+				name: tag_name,
+				value: tag_value
+			})
+		}
+	});
 }
 
 repo.init();

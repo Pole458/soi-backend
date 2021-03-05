@@ -5,12 +5,12 @@ const {sha256} = require('crypto-hash');
 const { response } = require('express');
 
 /**
- * Max age for a token. Currently one day
+ * Max age for a token (1 day).
  */
 const tokenMaxAge = 24 * 3600 * 1000;
 
 /**
- * Generates a new token for the user
+ * Generates a new token for the user.
  * @param {string} username 
  * @param {string} password 
  */
@@ -28,26 +28,24 @@ async function generateToken(username, password) {
 	};
 }
 
-//ciao
-
 /**
- * Check if the token is valid
+ * Check if the token is valid.
  * @param {object} token should be a json object containing {username, time, hash}
  */
-async function checkToken(token) {
+function checkToken(token) {
 	
 	// Check token integrity
 	if(!token || !token.username || !token.time || !token.hash) {
 		return false;
 	}
 
-	// Check token expiration date (1 day)
+	// Check token expiration date
 	if(token.time + tokenMaxAge < Date.now()) {
 		return false;
 	}
 
 	// Check token hash
-	const storedTokenHash = await repo.getTokenHash(token.username);
+	const storedTokenHash = repo.getTokenHash(token.username);
 	if(storedTokenHash != token.hash) {
 		return false;
 	}
@@ -56,7 +54,7 @@ async function checkToken(token) {
 }
 
 /**
- * Helper method to set the token cookie in a response
+ * Helper method to set the token cookie in a response.
  */
 function setTokenCookie(resp, token) {
 	resp.cookie("token", token, {
@@ -123,7 +121,7 @@ function routes(app) {
 		}
 
 		// Check if user is already registered
-		if(await repo.isUserRegistered(username)) {
+		if(repo.isUserRegistered(username)) {
 			resp.status(400);
 			resp.json({error: "Username is already registered"});
 			return;
@@ -133,7 +131,7 @@ function routes(app) {
 		const token = await generateToken(username, password);
 
 		// Register new user (with token)
-		await repo.registerUser(username, password, token);
+		repo.insertUser(username, password, token);
 
 		resp.status(200);
 		setTokenCookie(resp, token);
@@ -157,14 +155,14 @@ function routes(app) {
 		}
 
 		// Check if user is registered
-		if(!(await repo.isUserRegistered(username))) {
+		if(!repo.isUserRegistered(username)) {
 			resp.status(400);
 			resp.json({error: "Username is not registered"});
 			return;
 		}
 
 		// Get stored password for username
-		const storedPassword = await repo.getUserPassword(username);
+		const storedPassword = repo.getUserPassword(username);
 
 		// If passwords don't match, the sumbitted password is wrong
 		if(storedPassword != password) {
@@ -177,8 +175,8 @@ function routes(app) {
 		const token = await generateToken(username, password);
 
 		// Update token in database
-		await repo.updateToken(token)
-	
+		repo.updateToken(token);
+
 		resp.status(200);
 		setTokenCookie(resp, token);
 		resp.end();
@@ -192,7 +190,8 @@ function routes(app) {
 
 		// Check if user has a valid token
 		var token = req.cookies.token;
-		if(!(await checkToken(token))) {
+
+		if(!(checkToken(token))) {
 			resp.status(401);
 			resp.clearCookie("token");
 			resp.json({error: "Token is not valid"})
@@ -200,115 +199,81 @@ function routes(app) {
 		}
 
 		// Renew token
-		token = await generateToken(token.username, await repo.getUserPassword(token.username));
+		token = await generateToken(token.username, repo.getUserPassword(token.username));
 		// Update token in database
-		await repo.updateToken(token)
+		repo.updateToken(token);
 		
 		resp.status(200);
 		setTokenCookie(resp, token);
 		resp.end();
 	});
 
-	app.get("/projects", async (req, resp) => {
-		const token = req.cookies.token;
+	/**
+	 * Returns all users.
+	 */
+	app.get('/users', (req, resp) => {
 
-		if(await checkToken(token)) {
-			resp.status(200);
-			resp.json({projects: await repo.getProjects()});
-		} else {
-			resp.status(401);
-			resp.clearCookie("token");
-			resp.json({projects: await repo.getProjects(), error: "Token is not valid"});
-		}
+		// Example of token auth
+
+		// const token = req.cookies.token;
+		// if(!checkToken(token)) {
+		// 	resp.status(401);
+		// 	resp.clearCookie("token");
+		// 	resp.json({users: repo.getUsers(), error: "Token is not valid"});	
+		// }
+
+		resp.status(200);
+		resp.json(repo.getUsers());
 	});
 
-	app.post("/project", async (req, resp) => {
+
+	app.get("/user/:id", (req, resp) => {
+		const id = Number(req.params.id);
+
+		resp.status(200);
+		resp.json(repo.getUser(id));
+	});
+
+	/**
+	 * Returns all projects.
+	 */
+	app.get("/projects", (req, resp) => {
+
+		resp.status(200);
+		resp.json(repo.getProjects());
+	});
+
+	/**
+	 * Returns a project given its id.
+	 */
+	app.get("/project/:id", (req, resp) => {
 		
-		const token = req.cookies.token;
-
-		const { title } = req.body;
-
-		if(await checkToken(token)) {
-			resp.status(200);
-			resp.json({project: await repo.getProject(title)});
-		} else {
-			resp.status(401);
-			resp.clearCookie("token");
-			resp.json({projects: await repo.getProject(title), error: "Token is not valid"});
-		}
-	});
-
-	app.get("/tags", async (req, resp) => {
-
-		const { title } = req.body;
+		const id = Number(req.params.id);
 
 		resp.status(200);
-		resp.json([
-			{
-				tag: "species",
-				values: [
-					"Lion",
-					"Zebra",
-					"Giraffe",
-					"Donphan"
-				]
-			},
-			{
-				tag: "colors",
-				values: [
-					"Red", "Blue", "Green"
-				]
-			}
-		]);
+		resp.json(repo.getProject(id));
 	});
 
-	app.get("/records", async (req, resp) => {
+	/**
+	 * Returns all the records of a project given its id.
+	 */
+	app.get("/project/:id/records", (req, resp) => {
 
-		const { title } = req.body;
+		const id = Number(req.params.id);
 
 		resp.status(200);
-		resp.json([
-			{
-				input: "Immagine di un pikachu",
-				tags: [
-					{
-						tag: "Type",
-						values: " electric"
-					},
-					{
-						tag: "Species",
-						values: "Lion"
-					}
-				]
-			},
-			{
-				input: "Immagine di un Leone vero",
-				tags: [
-					{
-						tag: "Type",
-						values: "Water"
-					},
-					{
-						tag: "Species",
-						values: "Pikachu"
-					}
-				]
-			},
-		]);
+		resp.json(repo.getProjectRecords(id));
 	});
 
-	app.get('/users', async (req, resp) => {
+	/**
+	 * Returns a record given its id.
+	 */
+	app.get("/record/:id", (req, resp) => {
 
-		const token = req.cookies.token;
+		const id = Number(req.params.id);
 
-		if(await checkToken(token)) {
-			resp.status(200);
-			resp.json({users: await repo.getUsers()});
-		} else {
-			resp.status(401);
-			resp.clearCookie("token");
-			resp.json({users: await repo.getUsers(), error: "Token is not valid"});
-		}
+		resp.status(200);
+		resp.json(repo.getRecord(id));
 	});
 }
 
