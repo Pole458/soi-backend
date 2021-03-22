@@ -39,10 +39,12 @@ repo.fillForTesting = () => {
 	const project_id = repo.insertProject("Pokemon").$loki;
 
 	repo.addTagToProject(project_id, "Type");
-
 	repo.addTagValueToProject(project_id, "Type", "Grass");
 	repo.addTagValueToProject(project_id, "Type", "Water");
 	repo.addTagValueToProject(project_id, "Type", "Fire");
+
+	repo.addTagToProject(project_id, "Region");
+	repo.addTagValueToProject(project_id, "Region", "Kanto");
 
 	repo.insertRecord(project_id, "Bulbasaur");
 	repo.insertRecord(project_id, "Charmander");
@@ -132,6 +134,11 @@ repo.getProject = (id) => {
 	}
 
 	return null;
+}
+
+repo.isProjectTitleTaken = (title) => {
+	const q = db.projects.findOne({ title: title })
+	return q ? true : false;
 }
 
 repo.getProjects = () => {

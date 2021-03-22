@@ -1,7 +1,7 @@
 'use strict';
 
 const { repo } = require('./repo');
-const {sha256} = require('crypto-hash');
+const { sha256 } = require('crypto-hash');
 const { response } = require('express');
 
 /**
@@ -33,20 +33,20 @@ async function generateToken(username, password) {
  * @param {object} token should be a json object containing {username, time, hash}
  */
 function checkToken(token) {
-	
+
 	// Check token integrity
-	if(!token || !token.username || !token.time || !token.hash) {
+	if (!token || !token.username || !token.time || !token.hash) {
 		return false;
 	}
 
 	// Check token expiration date
-	if(token.time + tokenMaxAge < Date.now()) {
+	if (token.time + tokenMaxAge < Date.now()) {
 		return false;
 	}
 
 	// Check token hash
 	const storedTokenHash = repo.getTokenHash(token.username);
-	if(storedTokenHash != token.hash) {
+	if (storedTokenHash != token.hash) {
 		return false;
 	}
 
@@ -66,36 +66,36 @@ function setTokenCookie(resp, token) {
 
 function validateUsername(str) {
 	// Check if input is a valid string
-	if(!str || typeof str !== 'string') {
+	if (!str || typeof str !== 'string') {
 		return false;
 	}
 
 	// Check length
-	if(str.length <= 0 || str.length > 20) {
+	if (str.length <= 0 || str.length > 20) {
 		return false;
 	}
 
 	// Check with regex if name contains only allowed characters
-	if(!(/^[0-9a-zA-Z]+$/.test(str))) {
+	if (!(/^[0-9a-zA-Z]+$/.test(str))) {
 		return false;
 	}
-	
+
 	return true;
 }
 
 function validatePassword(str) {
 	// Check if input is a valid string
-	if(!str || typeof str !== 'string') {
+	if (!str || typeof str !== 'string') {
 		return false;
 	}
 
 	// Check length
-	if(str.length <= 0 || str.length > 20) {
+	if (str.length <= 0 || str.length > 20) {
 		return false;
 	}
 
 	// Check with regex if name contains only allowed characters
-	if(!(/^[0-9a-zA-Z]+$/.test(str))) {
+	if (!(/^[0-9a-zA-Z]+$/.test(str))) {
 		return false;
 	}
 
@@ -110,20 +110,20 @@ function routes(app) {
 	 * It also renews the token.
 	 */
 	app.post('/signin', async (req, resp) => {
-		
+
 		const { username, password } = req.body;
 
 		// Validate username
-		if(!validateUsername(username) || !validatePassword(password)) {
+		if (!validateUsername(username) || !validatePassword(password)) {
 			resp.status(400);
-			resp.json({error: "Please provide valid username and password"});
+			resp.json({ error: "Please provide valid username and password" });
 			return;
 		}
 
 		// Check if user is already registered
-		if(repo.isUserRegistered(username)) {
+		if (repo.isUserRegistered(username)) {
 			resp.status(400);
-			resp.json({error: "Username is already registered"});
+			resp.json({ error: "Username is already registered" });
 			return;
 		}
 
@@ -148,16 +148,16 @@ function routes(app) {
 		const { username, password } = req.body;
 
 		// Validate username and password
-		if(!validateUsername(username) || !validatePassword(password)) {
+		if (!validateUsername(username) || !validatePassword(password)) {
 			resp.status(400);
-			resp.json({error: "Please provide valid username and password"});
+			resp.json({ error: "Please provide valid username and password" });
 			return;
 		}
 
 		// Check if user is registered
-		if(!repo.isUserRegistered(username)) {
+		if (!repo.isUserRegistered(username)) {
 			resp.status(400);
-			resp.json({error: "Username is not registered"});
+			resp.json({ error: "Username is not registered" });
 			return;
 		}
 
@@ -165,9 +165,9 @@ function routes(app) {
 		const storedPassword = repo.getUserPassword(username);
 
 		// If passwords don't match, the sumbitted password is wrong
-		if(storedPassword != password) {
+		if (storedPassword != password) {
 			resp.status(401);
-			resp.json({error: "Password is wrong"});
+			resp.json({ error: "Password is wrong" });
 			return;
 		}
 
@@ -191,10 +191,10 @@ function routes(app) {
 		// Check if user has a valid token
 		var token = req.cookies.token;
 
-		if(!(checkToken(token))) {
+		if (!(checkToken(token))) {
 			resp.status(401);
 			resp.clearCookie("token");
-			resp.json({error: "Token is not valid"})
+			resp.json({ error: "Token is not valid" })
 			return;
 		}
 
@@ -202,7 +202,7 @@ function routes(app) {
 		token = await generateToken(token.username, repo.getUserPassword(token.username));
 		// Update token in database
 		repo.updateToken(token);
-		
+
 		resp.status(200);
 		setTokenCookie(resp, token);
 		resp.end();
@@ -226,7 +226,6 @@ function routes(app) {
 		resp.json(repo.getUsers());
 	});
 
-
 	app.get("/user/:id", (req, resp) => {
 		const id = Number(req.params.id);
 
@@ -247,7 +246,7 @@ function routes(app) {
 	 * Returns a project given its id.
 	 */
 	app.get("/project/:id", (req, resp) => {
-		
+
 		const id = Number(req.params.id);
 
 		resp.status(200);
@@ -275,6 +274,23 @@ function routes(app) {
 		resp.status(200);
 		resp.json(repo.getRecord(id));
 	});
+
+	app.post("/project", (req, resp) => {
+
+		const { title } = req.body;
+
+		// Check if a project with the same title already exists
+		if (repo.isProjectTitleTaken(title)) {
+			resp.status(400);
+			resp.json({ error: "Project title is already taken" })
+			return;
+		}
+
+		const project = repo.insertProject(title);
+
+		resp.status(200);
+		resp.json(project);
+	})
 }
 
 module.exports = { routes };
