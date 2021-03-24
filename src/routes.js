@@ -291,6 +291,107 @@ function routes(app) {
 		resp.status(200);
 		resp.json(project);
 	})
+
+	app.post("/record", (req, resp) => {
+
+		const { project_id, input } = req.body;
+
+		const record = repo.insertRecord(project_id, input);
+
+		resp.status(200);
+		resp.json(record);
+	})
+
+	app.post("/remove_project", (req, resp) => {
+
+		const { title } = req.body;
+
+		repo.removeProject(title);
+
+		resp.status(200);
+		resp.end();
+	})
+
+	app.post("/remove_record", (req, resp) => {
+
+		const { record_id } = req.body;
+
+		repo.removeRecord(record_id);
+
+		resp.status(200);
+		resp.end();
+	})
+
+	app.post("/tag_project", (req, resp) => {
+
+		const { project_id, tag_name } = req.body;
+
+		repo.addTagToProject(project_id, tag_name);
+
+		resp.status(200);
+		resp.end();
+	})
+
+	app.post("/tag_value_project", (req, resp) => {
+
+		const { project_id, tag_name, tag_value } = req.body;
+
+		repo.addTagValueToProject(project_id, tag_name, tag_value);
+
+		resp.status(200);
+		resp.end();
+	})
+
+	app.post("/remove_tag_project", (req, resp) => {
+
+		const { project_id, tag_name } = req.body;
+
+		repo.removeTagFromProject(project_id, tag_name);
+
+		resp.status(200);
+		resp.end();
+	})
+
+	app.post("/remove_tag_value_project", (req, resp) => {
+
+		const { project_id, tag_name, tag_value } = req.body;
+
+		repo.removeTagValueFromProject(project_id, tag_name, tag_value);
+
+		resp.status(200);
+		resp.end();
+	})
+
+	app.post("/tag_record", (req, resp) => {
+
+		const { record_id, tag_name, tag_value } = req.body;
+
+		repo.setTagToRecord(record_id, tag_name, tag_value);
+
+		resp.status(200);
+		resp.end();
+	})
+
+	app.post("/remove_tag_record", (req, resp) => {
+
+		const { record_id, tag_name } = req.body;
+
+		repo.removeTagFromRecord(record_id, tag_name);
+
+		resp.status(200);
+		resp.end();
+	})
+
+	app.post("/modify_record", (req, resp) => {
+
+		const { record_id, input } = req.body;
+
+		repo.modifyInputRecord(record_id, input);
+
+		resp.status(200);
+		resp.end();
+	})
+
 }
 
 module.exports = { routes };

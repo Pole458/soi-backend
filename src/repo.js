@@ -38,6 +38,9 @@ repo.fillForTesting = () => {
 
 	const project_id = repo.insertProject("Pokemon").$loki;
 
+	//const title2 = repo.insertProject("Giochi").title;
+	//repo.removeProject(title2);
+
 	repo.addTagToProject(project_id, "Type");
 	repo.addTagValueToProject(project_id, "Type", "Grass");
 	repo.addTagValueToProject(project_id, "Type", "Water");
@@ -46,12 +49,19 @@ repo.fillForTesting = () => {
 	repo.addTagToProject(project_id, "Region");
 	repo.addTagValueToProject(project_id, "Region", "Kanto");
 
+
 	repo.insertRecord(project_id, "Bulbasaur");
 	repo.insertRecord(project_id, "Charmander");
 	const record_id = repo.insertRecord(project_id, "Squirtle").$loki;
 
 	repo.setTagToRecord(record_id, "Region", "Kanto");
 	repo.setTagToRecord(record_id, "Type", "Water");
+
+	//repo.removeTagFromProject(project_id, "Region");
+	//repo.removeTagValueFromProject(project_id, "Type", "Water")
+	//repo.removeTagFromRecord(record_id, "Type")
+	repo.modifyInputRecord(record_id, "Blastoise")
+
 }
 
 repo.isUserRegistered = (username) => {
@@ -120,6 +130,12 @@ repo.insertProject = (title) => {
 	});
 }
 
+repo.removeProject = (title) => {
+	db.projects.chain().find({
+		title: title
+	}).remove();
+}
+
 
 repo.getProject = (id) => {
 
@@ -164,6 +180,31 @@ repo.addTagToProject = (project_id, tag_name) => {
 	});
 }
 
+repo.removeTagFromProject = (project_id, tag_name) => {
+	db.projects.chain().find({
+		$loki: project_id,
+	}).update(project => {
+		for (const tag of project.tags) {
+			if (tag.name === tag_name) {
+				var index = project.tags.indexOf(tag)
+				project.tags.splice(index, 1)
+			}
+		}
+	})
+
+	db.records.chain().find({
+		project_id: project_id
+	}).update(record => {
+		for (const tag of record.tags){
+			if (tag.name === tag_name) {
+				var index = record.tags.indexOf(tag)
+				record.tags.splice(index, 1)
+			}
+		}
+	})
+
+}
+
 repo.addTagValueToProject = (project_id, tag_name, tag_value) => {
 	db.projects.chain().find({
 		$loki: project_id,
@@ -177,6 +218,35 @@ repo.addTagValueToProject = (project_id, tag_name, tag_value) => {
 	});
 }
 
+repo.removeTagValueFromProject = (project_id, tag_name, tag_value) => {
+	db.projects.chain().find({
+		$loki: project_id,
+	}).update(project => {
+		for (const tag of project.tags) {
+			if (tag.name === tag_name) {
+				for(const value of tag.values){
+					if(value === tag_value){
+						var index = tag.values.indexOf(value)
+						tag.values.splice(index, 1)
+					}
+				}
+			}
+		}
+	})
+
+	db.records.chain().find({
+		project_id: project_id
+	}).update(record => {
+		for (const tag of record.tags){
+			if (tag.name === tag_name && tag.value === tag_value) {
+				var index = record.tags.indexOf(tag)
+				record.tags.splice(index, 1)
+			}
+		}
+	})
+}
+
+
 repo.insertRecord = (project_id, input) => {
 	return db.records.insert({
 		project_id: project_id,
@@ -185,6 +255,20 @@ repo.insertRecord = (project_id, input) => {
 	});
 }
 
+repo.removeRecord = (record_id) => {
+	db.records.chain().find({
+		$loki: record_id,
+	}).remove();
+}
+
+
+repo.modifyInputRecord = (record_id, input) => {
+	db.records.chain().find({
+		$loki: record_id,
+	}, true).update(record => {
+			record.input = input;
+		})
+}
 
 repo.getRecord = (id) => {
 	const record = db.records.get(id);
@@ -235,6 +319,20 @@ repo.setTagToRecord = (record_id, tag_name, tag_value) => {
 		}
 	});
 }
+
+repo.removeTagFromRecord = (record_id, tag_name) => {
+	db.records.chain().find({
+		$loki: record_id
+	}).update(record => {
+		for (const tag of record.tags){
+			if (tag.name === tag_name) {
+				var index = record.tags.indexOf(tag)
+				record.tags.splice(index, 1)
+			}
+		}
+	})
+}
+
 
 repo.init();
 
