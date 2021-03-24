@@ -6,6 +6,22 @@ const loki = require('lokijs');
 
 const db = new loki("test.json");
 
+// Changes $loki to id and removes lokijs metadata
+const polish = (i) => {
+
+	if(!i) return null;
+
+	const o = {}
+	for (const [key, value] of Object.entries(i)) {
+		if (key === "$loki")
+			o["id"] = value
+		else if (key !== "meta")
+			o[key] = value
+	}
+
+	return o;
+}
+
 /**
  * JSON object containing Repository helper methods.
  */
@@ -27,6 +43,8 @@ repo.init = () => {
 		indices: ["project_id"]
 	});
 
+	db.events = db.addCollection("events");
+
 	if (testing) {
 		repo.fillForTesting();
 	}
@@ -36,7 +54,7 @@ repo.init = () => {
 
 repo.fillForTesting = () => {
 
-	const project_id = repo.insertProject("Pokemon").$loki;
+	const project_id = repo.insertProject("Pokemon").id;
 
 	//const title2 = repo.insertProject("Giochi").title;
 	//repo.removeProject(title2);
@@ -52,7 +70,7 @@ repo.fillForTesting = () => {
 
 	repo.insertRecord(project_id, "Bulbasaur");
 	repo.insertRecord(project_id, "Charmander");
-	const record_id = repo.insertRecord(project_id, "Squirtle").$loki;
+	const record_id = repo.insertRecord(project_id, "Squirtle").id;
 
 	repo.setTagToRecord(record_id, "Region", "Kanto");
 	repo.setTagToRecord(record_id, "Type", "Water");
@@ -61,56 +79,35 @@ repo.fillForTesting = () => {
 	//repo.removeTagValueFromProject(project_id, "Type", "Water")
 	//repo.removeTagFromRecord(record_id, "Type")
 	repo.modifyInputRecord(record_id, "Blastoise")
-
 }
 
-repo.isUserRegistered = (username) => {
+repo.isUserNameTaken = (username) => {
 	const q = db.users.findOne({ username: username });
 	return q ? true : false;
 }
 
-// May return undefined if the username is not registered
-repo.getUserPassword = (username) => {
-	const q = db.users.findOne({ username: username });
-	return q ? q.password : undefined;
+repo.getUserByUsername = (username) => {
+	return polish(db.users.findOne({ username: username }));
 }
 
 repo.updateToken = (token) => {
 	db.users.chain().find({
-		username: token.username
+		$loki: token.id
 	}).update(user => {
 		user.token_hash = token.hash;
 		user.token_time = token.time;
 	});
 }
 
-// Returns undefined if the username is not registered
-repo.getTokenHash = (username) => {
-	const q = db.users.findOne({ username: username });
-	return q ? q.token_hash : undefined;
-}
-
-repo.insertUser = (username, password, token) => {
-	db.users.insert({
+repo.insertUser = (username, password) => {
+	return polish(db.users.insert({
 		username: username,
 		password: password,
-		token_hash: token.hash,
-		token_time: token.time
-	});
+	}));
 }
 
 repo.getUser = (id) => {
-
-	const user = db.users.get(id);
-
-	if (user) {
-		return {
-			id: user.$loki,
-			username: user.username,
-		};
-	}
-
-	return null;
+	return polish(db.users.get(id));
 }
 
 repo.getUsers = () => {
@@ -122,20 +119,30 @@ repo.getUsers = () => {
 	}).data({ removeMeta: true });
 }
 
+repo.getEvents = () => {
+	return db.events.chain().map(e => {
+		return {
+			id: e.$loki,
+			user_id: e.user_id,
+			date: e.meta.created,
+			action: e.action,
+			info: e.info
+		}
+	}).data({ removeMeta: true })
+}
 
 repo.insertProject = (title) => {
-	return db.projects.insert({
+	return polish(db.projects.insert({
 		title: title,
 		tags: [],
-	});
+	}));
 }
 
-repo.removeProject = (title) => {
+repo.removeProject = (id) => {
 	db.projects.chain().find({
-		title: title
+		$loki: id
 	}).remove();
 }
-
 
 repo.getProject = (id) => {
 
@@ -150,6 +157,18 @@ repo.getProject = (id) => {
 	}
 
 	return null;
+}
+
+repo.getProjectFromTitle = (title) => {
+	return db.projects.chain().findOne({
+		title: title
+	}).map(project => {
+		return {
+			id: project.$loki,
+			title: project.title,
+			tags: project.tags
+		}
+	}).data({ removeMeta: true });
 }
 
 repo.isProjectTitleTaken = (title) => {
@@ -195,7 +214,7 @@ repo.removeTagFromProject = (project_id, tag_name) => {
 	db.records.chain().find({
 		project_id: project_id
 	}).update(record => {
-		for (const tag of record.tags){
+		for (const tag of record.tags) {
 			if (tag.name === tag_name) {
 				var index = record.tags.indexOf(tag)
 				record.tags.splice(index, 1)
@@ -224,8 +243,8 @@ repo.removeTagValueFromProject = (project_id, tag_name, tag_value) => {
 	}).update(project => {
 		for (const tag of project.tags) {
 			if (tag.name === tag_name) {
-				for(const value of tag.values){
-					if(value === tag_value){
+				for (const value of tag.values) {
+					if (value === tag_value) {
 						var index = tag.values.indexOf(value)
 						tag.values.splice(index, 1)
 					}
@@ -237,7 +256,7 @@ repo.removeTagValueFromProject = (project_id, tag_name, tag_value) => {
 	db.records.chain().find({
 		project_id: project_id
 	}).update(record => {
-		for (const tag of record.tags){
+		for (const tag of record.tags) {
 			if (tag.name === tag_name && tag.value === tag_value) {
 				var index = record.tags.indexOf(tag)
 				record.tags.splice(index, 1)
@@ -246,13 +265,12 @@ repo.removeTagValueFromProject = (project_id, tag_name, tag_value) => {
 	})
 }
 
-
 repo.insertRecord = (project_id, input) => {
-	return db.records.insert({
+	return polish(db.records.insert({
 		project_id: project_id,
 		input: input,
 		tags: []
-	});
+	}));
 }
 
 repo.removeRecord = (record_id) => {
@@ -266,8 +284,8 @@ repo.modifyInputRecord = (record_id, input) => {
 	db.records.chain().find({
 		$loki: record_id,
 	}, true).update(record => {
-			record.input = input;
-		})
+		record.input = input;
+	})
 }
 
 repo.getRecord = (id) => {
@@ -324,13 +342,45 @@ repo.removeTagFromRecord = (record_id, tag_name) => {
 	db.records.chain().find({
 		$loki: record_id
 	}).update(record => {
-		for (const tag of record.tags){
+		for (const tag of record.tags) {
 			if (tag.name === tag_name) {
 				var index = record.tags.indexOf(tag)
 				record.tags.splice(index, 1)
 			}
 		}
 	})
+}
+
+repo.insertEvent = (user_id, action, info) => {
+	return polish(db.events.insert({
+		user_id: user_id,
+		action: action,
+		info: info,
+	}));
+}
+
+repo.getEventsFromUserId = (user_id) => {
+	return db.events.chain().find({
+		user_id: user_id
+	}).map(e => {
+		return polish(e)
+	}).data( {removeMeta: true });
+}
+
+repo.getEventsFromProjectId = (project_id) => {
+	return db.events.chain().find({
+		"info.project_id": project_id
+	}).map(e => {
+		return polish(e)
+	}).data( {removeMeta: true });
+}
+
+repo.getEventsFromRecordId = (record_id) => {
+	return db.events.chain().find({
+		"info.record_id": record_id
+	}).map(e => {
+		return polish(e)
+	}).data( {removeMeta: true });
 }
 
 

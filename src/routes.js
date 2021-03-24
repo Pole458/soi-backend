@@ -2,7 +2,6 @@
 
 const { repo } = require('./repo');
 const { sha256 } = require('crypto-hash');
-const { response } = require('express');
 
 /**
  * Max age for a token (1 day).
@@ -11,18 +10,18 @@ const tokenMaxAge = 24 * 3600 * 1000;
 
 /**
  * Generates a new token for the user.
- * @param {string} username 
+ * @param {string} id 
  * @param {string} password 
  */
-async function generateToken(username, password) {
+async function generateToken(id, password) {
 
 	const now = Date.now();
 
 	// Generate hash
-	const hash = await sha256(username + password + now);
+	const hash = await sha256("" + id + password + now);
 
 	return {
-		username: username,
+		id: id,
 		time: now,
 		hash: hash,
 	};
@@ -30,12 +29,12 @@ async function generateToken(username, password) {
 
 /**
  * Check if the token is valid.
- * @param {object} token should be a json object containing {username, time, hash}
+ * @param {object} token should be a json object containing { id, time, hash }
  */
 function checkToken(token) {
 
 	// Check token integrity
-	if (!token || !token.username || !token.time || !token.hash) {
+	if (!token || !token.id || !token.time || !token.hash) {
 		return false;
 	}
 
@@ -45,8 +44,8 @@ function checkToken(token) {
 	}
 
 	// Check token hash
-	const storedTokenHash = repo.getTokenHash(token.username);
-	if (storedTokenHash != token.hash) {
+	const user = repo.getUser(token.id);
+	if (!user || user.token_hash !== token.hash) {
 		return false;
 	}
 
@@ -102,6 +101,30 @@ function validatePassword(str) {
 	return true;
 }
 
+/**
+ * Middleware used by route to check authorization before actually using the api
+ * @param {*} req 
+ * @param {*} res 
+ * @param {*} next 
+ */
+const checkAuth = function (req, resp, next) {
+
+	const token = req.cookies.token;
+
+	if (!(checkToken(token))) {
+		// resp.status(401);
+		// resp.clearCookie("token");
+		// resp.json({ error: "Token is not valid" })
+
+		next();
+		return;
+	}
+
+	resp.locals.id = token.id;
+
+	next();
+};
+
 function routes(app) {
 
 	/**
@@ -121,17 +144,23 @@ function routes(app) {
 		}
 
 		// Check if user is already registered
-		if (repo.isUserRegistered(username)) {
+		if (repo.isUserNameTaken(username)) {
 			resp.status(400);
 			resp.json({ error: "Username is already registered" });
 			return;
 		}
 
-		// Generate new token
-		const token = await generateToken(username, password);
+		// Register new user
+		const user_id = repo.insertUser(username, password).id;
 
-		// Register new user (with token)
-		repo.insertUser(username, password, token);
+		// Generate new token
+		const token = await generateToken(user_id, password);
+
+		// Update stored token
+		repo.updateToken(token);
+
+		// Register event
+		repo.insertEvent(user_id, "signed in")
 
 		resp.status(200);
 		setTokenCookie(resp, token);
@@ -155,26 +184,26 @@ function routes(app) {
 		}
 
 		// Check if user is registered
-		if (!repo.isUserRegistered(username)) {
+		if (!repo.isUserNameTaken(username)) {
 			resp.status(400);
 			resp.json({ error: "Username is not registered" });
 			return;
 		}
 
 		// Get stored password for username
-		const storedPassword = repo.getUserPassword(username);
+		const user = repo.getUserByUsername(username);
 
 		// If passwords don't match, the sumbitted password is wrong
-		if (storedPassword != password) {
+		if (user.password !== password) {
 			resp.status(401);
 			resp.json({ error: "Password is wrong" });
 			return;
 		}
 
 		// Generate new token
-		const token = await generateToken(username, password);
+		const token = await generateToken(user.id, password);
 
-		// Update token in database
+		// Update stored token
 		repo.updateToken(token);
 
 		resp.status(200);
@@ -186,7 +215,7 @@ function routes(app) {
 	 * API call that can be used to login given a valid token.
 	 * It also renews the token. 
 	 */
-	app.post('/login-token', async (req, resp) => {
+	app.post('/login-with-token', async (req, resp) => {
 
 		// Check if user has a valid token
 		var token = req.cookies.token;
@@ -199,7 +228,7 @@ function routes(app) {
 		}
 
 		// Renew token
-		token = await generateToken(token.username, repo.getUserPassword(token.username));
+		token = await generateToken(token.id, repo.getUser(token.id).password);
 		// Update token in database
 		repo.updateToken(token);
 
@@ -211,33 +240,54 @@ function routes(app) {
 	/**
 	 * Returns all users.
 	 */
-	app.get('/users', (req, resp) => {
+	app.get('/users', checkAuth, (req, resp) => {
 
-		// Example of token auth
+		const polished_users = []
 
-		// const token = req.cookies.token;
-		// if(!checkToken(token)) {
-		// 	resp.status(401);
-		// 	resp.clearCookie("token");
-		// 	resp.json({users: repo.getUsers(), error: "Token is not valid"});	
-		// }
+		repo.getUsers().forEach(user => {
+			{
+				polished_users.push({
+					id: user.id,
+					username: user.username
+				})
+			}
+		})
 
 		resp.status(200);
-		resp.json(repo.getUsers());
+		resp.json(polished_users);
 	});
 
-	app.get("/user/:id", (req, resp) => {
+	app.get("/user/:id", checkAuth, (req, resp) => {
+		const id = Number(req.params.id);
+
+		const user = repo.getUser(id);
+
+		if (user) {
+			resp.status(200);
+			resp.json({
+				id: user.id,
+				username: user.username,
+			});
+		} else {
+			resp.status(404);
+			resp.json({ error: "No user found with id " + id })
+		}
+	});
+
+	/**
+	 * Returns all the events made by an user given its id.
+	 */
+	app.get("/user/:id/events", checkAuth, (req, resp) => {
 		const id = Number(req.params.id);
 
 		resp.status(200);
-		resp.json(repo.getUser(id));
+		resp.json(repo.getEventsFromUserId(id));
 	});
 
 	/**
 	 * Returns all projects.
 	 */
-	app.get("/projects", (req, resp) => {
-
+	app.get("/projects", checkAuth, (req, resp) => {
 		resp.status(200);
 		resp.json(repo.getProjects());
 	});
@@ -245,18 +295,25 @@ function routes(app) {
 	/**
 	 * Returns a project given its id.
 	 */
-	app.get("/project/:id", (req, resp) => {
+	app.get("/project/:id", checkAuth, (req, resp) => {
 
 		const id = Number(req.params.id);
 
-		resp.status(200);
-		resp.json(repo.getProject(id));
+		const project = repo.getProject(id);
+
+		if (project) {
+			resp.status(200);
+			resp.json(project);
+		} else {
+			resp.status(404);
+			resp.json({ error: "No project found with id " + id })
+		}
 	});
 
 	/**
 	 * Returns all the records of a project given its id.
 	 */
-	app.get("/project/:id/records", (req, resp) => {
+	app.get("/project/:id/records", checkAuth, (req, resp) => {
 
 		const id = Number(req.params.id);
 
@@ -265,131 +322,225 @@ function routes(app) {
 	});
 
 	/**
-	 * Returns a record given its id.
+	 * Returns all the events regarding a project given its id.
 	 */
-	app.get("/record/:id", (req, resp) => {
+	app.get("/project/:id/events", checkAuth, (req, resp) => {
 
 		const id = Number(req.params.id);
 
 		resp.status(200);
-		resp.json(repo.getRecord(id));
+		resp.json(repo.getEventsFromProjectId(id));
 	});
 
-	app.post("/project", (req, resp) => {
+	/**
+	 * Returns a record given its id.
+	 */
+	app.get("/record/:id", checkAuth, (req, resp) => {
+		const id = Number(req.params.id);
+
+		const record = repo.getRecord(id);
+
+		if (record) {
+			resp.status(200);
+			resp.json(record);
+		} else {
+			resp.status(404);
+			resp.json({ error: "No record found with id " + id })
+		}
+	});
+
+	/**
+	 * Returns all the events regarding a record given its id.
+	 */
+	app.get("/record/:id/events", checkAuth, (req, resp) => {
+
+		const id = Number(req.params.id);
+
+		resp.status(200);
+		resp.json(repo.getEventsFromRecordId(id));
+	});
+
+	app.post("/project", checkAuth, (req, resp) => {
 
 		const { title } = req.body;
 
 		// Check if a project with the same title already exists
 		if (repo.isProjectTitleTaken(title)) {
 			resp.status(400);
-			resp.json({ error: "Project title is already taken" })
+			resp.json({ error: "A project with this title already exists" })
 			return;
 		}
 
 		const project = repo.insertProject(title);
 
+		repo.insertEvent(resp.locals.id, "created project", {
+			project_id: project.id,
+			project_title: project.title
+		})
+
 		resp.status(200);
 		resp.json(project);
 	})
 
-	app.post("/record", (req, resp) => {
+	app.post("/record", checkAuth, (req, resp) => {
 
 		const { project_id, input } = req.body;
 
 		const record = repo.insertRecord(project_id, input);
 
+		repo.insertEvent(resp.locals.id, "added record to project", {
+			project_id: project_id,
+			record_id: record.id,
+			input: input
+		})
+
 		resp.status(200);
 		resp.json(record);
 	})
 
-	app.post("/remove_project", (req, resp) => {
+	app.post("/remove-project", checkAuth, (req, resp) => {
 
-		const { title } = req.body;
+		const { project_id } = req.body;
 
-		repo.removeProject(title);
+		repo.removeProject(project_id);
+
+		repo.insertEvent(resp.locals.id, "deleted project", {
+			project_id: project_id,
+		})
 
 		resp.status(200);
 		resp.end();
 	})
 
-	app.post("/remove_record", (req, resp) => {
+	app.post("/remove-record", checkAuth, (req, resp) => {
 
 		const { record_id } = req.body;
 
-		repo.removeRecord(record_id);
+		const record = repo.getRecord(record_id)
+
+		if (record) {
+			repo.insertEvent(resp.locals.id, "deleted record", {
+				record_id: record_id,
+				project_id: record.project_id
+			})
+
+			repo.removeRecord(record_id);
+		}
 
 		resp.status(200);
 		resp.end();
 	})
 
-	app.post("/tag_project", (req, resp) => {
+	app.post("/tag-project", checkAuth, (req, resp) => {
 
 		const { project_id, tag_name } = req.body;
 
 		repo.addTagToProject(project_id, tag_name);
 
+		repo.insertEvent(resp.locals.id, "added tag to project", {
+			project_id: project_id,
+			tag_name: tag_name
+		})
+
 		resp.status(200);
 		resp.end();
 	})
 
-	app.post("/tag_value_project", (req, resp) => {
+	app.post("/project-tag-value", checkAuth, (req, resp) => {
 
 		const { project_id, tag_name, tag_value } = req.body;
 
 		repo.addTagValueToProject(project_id, tag_name, tag_value);
 
+		repo.insertEvent(resp.locals.id, "added value to project", {
+			project_id: project_id,
+			tag_name: tag_name,
+			tag_value: tag_value
+		})
+
 		resp.status(200);
 		resp.end();
 	})
 
-	app.post("/remove_tag_project", (req, resp) => {
+	app.post("/project-remove-tag", checkAuth, (req, resp) => {
 
 		const { project_id, tag_name } = req.body;
 
 		repo.removeTagFromProject(project_id, tag_name);
 
+		repo.insertEvent(resp.locals.id, "removed tag from project", {
+			project_id: project_id,
+			tag_name: tag_name
+		})
+
 		resp.status(200);
 		resp.end();
 	})
 
-	app.post("/remove_tag_value_project", (req, resp) => {
+	app.post("/project-remove-tag-value", checkAuth, (req, resp) => {
 
 		const { project_id, tag_name, tag_value } = req.body;
 
 		repo.removeTagValueFromProject(project_id, tag_name, tag_value);
 
+		repo.insertEvent(resp.locals.id, "removed tag value from project", {
+			project_id: project_id,
+			tag_name: tag_name,
+			tag_value: tag_value
+		})
+
 		resp.status(200);
 		resp.end();
 	})
 
-	app.post("/tag_record", (req, resp) => {
+	app.post("/tag-record", checkAuth, (req, resp) => {
 
 		const { record_id, tag_name, tag_value } = req.body;
 
 		repo.setTagToRecord(record_id, tag_name, tag_value);
 
+		repo.insertEvent(resp.locals.id, "set tag to record", {
+			record_id: record_id,
+			tag_name: tag_name,
+			tag_value: tag_value
+		})
+
 		resp.status(200);
 		resp.end();
 	})
 
-	app.post("/remove_tag_record", (req, resp) => {
+	app.post("/remove-record-tag", checkAuth, (req, resp) => {
 
 		const { record_id, tag_name } = req.body;
 
 		repo.removeTagFromRecord(record_id, tag_name);
 
+		repo.insertEvent(resp.locals.id, "removed tag from record", {
+			record_id: record_id,
+			tag_name: tag_name
+		})
+
 		resp.status(200);
 		resp.end();
 	})
 
-	app.post("/modify_record", (req, resp) => {
+	app.post("/modify-record", checkAuth, (req, resp) => {
 
 		const { record_id, input } = req.body;
 
 		repo.modifyInputRecord(record_id, input);
 
+		repo.insertEvent(resp.locals.id, "modified input of record", {
+			record_id: record_id
+		})
+
 		resp.status(200);
 		resp.end();
+	})
+
+	app.get("/events", checkAuth, (req, resp) => {
+		resp.status(200);
+		resp.json(repo.getEvents());
 	})
 
 }
