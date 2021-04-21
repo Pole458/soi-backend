@@ -56,7 +56,8 @@ repo.fillForTesting = () => {
 
 	const project_id = repo.insertProject("Pokemon").id;
 
-	//const title2 = repo.insertProject("Giochi").title;
+	const title2 = repo.insertProject("Giochi").id;
+	//console.log(title2);
 	//repo.removeProject(title2);
 
 	repo.addTagToProject(project_id, "Type");
@@ -139,9 +140,11 @@ repo.insertProject = (title) => {
 }
 
 repo.removeProject = (id) => {
+	//console.log(id);
 	db.projects.chain().find({
 		$loki: id
 	}).remove();
+
 }
 
 repo.getProject = (id) => {
@@ -229,8 +232,16 @@ repo.addTagValueToProject = (project_id, tag_name, tag_value) => {
 		$loki: project_id,
 	}).update(project => {
 		for (const tag of project.tags) {
+			let b = true;
 			if (tag.name === tag_name) {
-				tag.values.push(tag_value);
+				for(const value of tag.values){
+					if(value === tag_value)
+						b = false;
+				}
+				
+				if(b)
+					tag.values.push(tag_value);
+
 				break;
 			}
 		}
