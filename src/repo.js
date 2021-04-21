@@ -374,7 +374,9 @@ repo.getEventsFromUserId = (user_id) => {
 	return db.events.chain().find({
 		user_id: user_id
 	}).map(e => {
-		return polish(e)
+		const e2 = polish(e)
+		e2.date = e.meta.created
+		return e2
 	}).data( {removeMeta: true });
 }
 
@@ -382,7 +384,9 @@ repo.getEventsFromProjectId = (project_id) => {
 	return db.events.chain().find({
 		"info.project_id": project_id
 	}).map(e => {
-		return polish(e)
+		const e2 = polish(e)
+		e2.date = e.meta.created
+		return e2
 	}).data( {removeMeta: true });
 }
 
@@ -390,7 +394,9 @@ repo.getEventsFromRecordId = (record_id) => {
 	return db.events.chain().find({
 		"info.record_id": record_id
 	}).map(e => {
-		return polish(e)
+		const e2 = polish(e)
+		e2.date = e.meta.created
+		return e2
 	}).data( {removeMeta: true });
 }
 
