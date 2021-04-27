@@ -383,7 +383,7 @@ repo.getEventsFromUserId = (user_id) => {
 repo.getEventsFromProjectId = (project_id) => {
 	return db.events.chain().find({
 		"info.project_id": project_id
-	}).map(e => {
+	})	.map(e => {
 		const e2 = polish(e)
 		e2.date = e.meta.created
 		return e2
@@ -393,7 +393,7 @@ repo.getEventsFromProjectId = (project_id) => {
 repo.getEventsFromRecordId = (record_id) => {
 	return db.events.chain().find({
 		"info.record_id": record_id
-	}).map(e => {
+	})	.map(e => {
 		const e2 = polish(e)
 		e2.date = e.meta.created
 		return e2

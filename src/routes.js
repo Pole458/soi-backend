@@ -258,7 +258,7 @@ function routes(app) {
 	});
 
 	app.get("/user/:id", checkAuth, (req, resp) => {
-		const id = Number(req.params.id);
+		const id = parseInt(req.params.id);
 
 		const user = repo.getUser(id);
 
@@ -278,7 +278,7 @@ function routes(app) {
 	 * Returns all the events made by an user given its id.
 	 */
 	app.get("/user/:id/events", checkAuth, (req, resp) => {
-		const id = Number(req.params.id);
+		const id = parseInt(req.params.id);
 
 		resp.status(200);
 		resp.json(repo.getEventsFromUserId(id));
@@ -297,7 +297,7 @@ function routes(app) {
 	 */
 	app.get("/project/:id", checkAuth, (req, resp) => {
 
-		const id = Number(req.params.id);
+		const id = parseInt(req.params.id);
 
 		const project = repo.getProject(id);
 
@@ -315,7 +315,7 @@ function routes(app) {
 	 */
 	app.get("/project/:id/records", checkAuth, (req, resp) => {
 
-		const id = Number(req.params.id);
+		const id = parseInt(req.params.id);
 
 		resp.status(200);
 		resp.json(repo.getProjectRecords(id));
@@ -326,7 +326,7 @@ function routes(app) {
 	 */
 	app.get("/project/:id/events", checkAuth, (req, resp) => {
 
-		const id = Number(req.params.id);
+		const id = parseInt(req.params.id);
 
 		resp.status(200);
 		resp.json(repo.getEventsFromProjectId(id));
@@ -336,7 +336,7 @@ function routes(app) {
 	 * Returns a record given its id.
 	 */
 	app.get("/record/:id", checkAuth, (req, resp) => {
-		const id = Number(req.params.id);
+		const id = parseInt(req.params.id);
 
 		const record = repo.getRecord(id);
 
@@ -354,7 +354,7 @@ function routes(app) {
 	 */
 	app.get("/record/:id/events", checkAuth, (req, resp) => {
 
-		const id = Number(req.params.id);
+		const id = parseInt(req.params.id);
 
 		resp.status(200);
 		resp.json(repo.getEventsFromRecordId(id));
@@ -384,9 +384,10 @@ function routes(app) {
 
 	app.post("/record", checkAuth, (req, resp) => {
 
-		const { project_id, input } = req.body;
+		const { input } = req.body;
+		const project_id = parseInt(req.body.project_id);
 
-		const record = repo.insertRecord(parseInt(project_id), input);
+		const record = repo.insertRecord(project_id, input);
 
 		repo.insertEvent(resp.locals.id, "added record to project", {
 			project_id: project_id,
@@ -400,24 +401,23 @@ function routes(app) {
 
 	app.post("/remove-project", checkAuth, (req, resp) => {
 
-		const { project_id } = req.body;
+		const project_id = parseInt(req.body.project_id);
 
-		repo.removeProject(parseInt(project_id));
+		repo.removeProject(project_id);
 
 		repo.insertEvent(resp.locals.id, "deleted project", {
 			project_id: project_id,
 		})
 
-		//console.log(repo.getProjects());
 		resp.status(200);
 		resp.end();
 	})
 
 	app.post("/remove-record", checkAuth, (req, resp) => {
 
-		const { record_id } = req.body;
+		const record_id = parseInt(req.body.record_id);
 
-		const record = repo.getRecord(parseInt(record_id))
+		const record = repo.getRecord(record_id)
 
 		if (record) {
 			repo.insertEvent(resp.locals.id, "deleted record", {
@@ -425,7 +425,7 @@ function routes(app) {
 				project_id: record.project_id
 			})
 
-			repo.removeRecord(parseInt(record_id));
+			repo.removeRecord(record_id);
 		}
 
 		resp.status(200);
@@ -434,9 +434,10 @@ function routes(app) {
 
 	app.post("/tag-project", checkAuth, (req, resp) => {
 
-		const { project_id, tag_name } = req.body;
+		const { tag_name } = req.body;
+		const project_id = parseInt(req.body.project_id)
 
-		repo.addTagToProject(parseInt(project_id), tag_name);
+		repo.addTagToProject(project_id, tag_name);
 
 		repo.insertEvent(resp.locals.id, "added tag to project", {
 			project_id: project_id,
@@ -449,9 +450,10 @@ function routes(app) {
 
 	app.post("/project-tag-value", checkAuth, (req, resp) => {
 
-		const { project_id, tag_name, tag_value } = req.body;
+		const { tag_name, tag_value } = req.body;
+		const project_id = parseInt(req.body.project_id)
 
-		repo.addTagValueToProject(parseInt(project_id), tag_name, tag_value);
+		repo.addTagValueToProject(project_id, tag_name, tag_value);
 
 		repo.insertEvent(resp.locals.id, "added value to project", {
 			project_id: project_id,
@@ -465,9 +467,10 @@ function routes(app) {
 
 	app.post("/project-remove-tag", checkAuth, (req, resp) => {
 
-		const { project_id, tag_name } = req.body;
+		const { tag_name } = req.body;
+		const project_id = parseInt(req.body.project_id);
 
-		repo.removeTagFromProject(parseInt(project_id), tag_name);
+		repo.removeTagFromProject(project_id, tag_name);
 
 		repo.insertEvent(resp.locals.id, "removed tag from project", {
 			project_id: project_id,
@@ -480,9 +483,10 @@ function routes(app) {
 
 	app.post("/project-remove-tag-value", checkAuth, (req, resp) => {
 
-		const { project_id, tag_name, tag_value } = req.body;
+		const { tag_name, tag_value } = req.body;
+		const project_id = parseInt(req.body.project_id);
 
-		repo.removeTagValueFromProject(parseInt(project_id), tag_name, tag_value);
+		repo.removeTagValueFromProject(project_id, tag_name, tag_value);
 
 		repo.insertEvent(resp.locals.id, "removed tag value from project", {
 			project_id: project_id,
@@ -496,9 +500,10 @@ function routes(app) {
 
 	app.post("/tag-record", checkAuth, (req, resp) => {
 
-		const { record_id, tag_name, tag_value } = req.body;
+		const { tag_name, tag_value } = req.body;
+		const record_id = parseInt(req.body.record_id)
 
-		repo.setTagToRecord(parseInt(record_id), tag_name, tag_value);
+		repo.setTagToRecord(record_id, tag_name, tag_value);
 
 		repo.insertEvent(resp.locals.id, "set tag to record", {
 			record_id: record_id,
@@ -512,9 +517,10 @@ function routes(app) {
 
 	app.post("/remove-record-tag", checkAuth, (req, resp) => {
 
-		const { record_id, tag_name } = req.body;
+		const { tag_name } = req.body;
+		const record_id = parseInt(req.body.record_id);
 
-		repo.removeTagFromRecord(parseInt(record_id), tag_name);
+		repo.removeTagFromRecord(record_id, tag_name);
 
 		repo.insertEvent(resp.locals.id, "removed tag from record", {
 			record_id: record_id,
@@ -527,9 +533,10 @@ function routes(app) {
 
 	app.post("/modify-record", checkAuth, (req, resp) => {
 
-		const { record_id, input } = req.body;
+		const { input } = req.body;
+		const record_id = parseInt(req.body.record_id);
 
-		repo.modifyInputRecord(parseInt(record_id), input);
+		repo.modifyInputRecord(record_id, input);
 
 		repo.insertEvent(resp.locals.id, "modified input of record", {
 			record_id: record_id
@@ -543,7 +550,6 @@ function routes(app) {
 		resp.status(200);
 		resp.json(repo.getEvents());
 	})
-
 }
 
 module.exports = { routes };
