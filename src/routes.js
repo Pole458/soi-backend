@@ -403,10 +403,13 @@ function routes(app) {
 
 		const project_id = parseInt(req.body.project_id);
 
+		const get_project = repo.getProject(project_id);
+
 		repo.removeProject(project_id);
 
 		repo.insertEvent(resp.locals.id, "deleted project", {
 			project_id: project_id,
+			title: get_project.title
 		})
 
 		resp.status(200);
@@ -417,12 +420,15 @@ function routes(app) {
 
 		const record_id = parseInt(req.body.record_id);
 
+		const get_record = repo.getRecord(record_id);
+
 		const record = repo.getRecord(record_id)
 
 		if (record) {
 			repo.insertEvent(resp.locals.id, "deleted record", {
 				record_id: record_id,
-				project_id: record.project_id
+				project_id: record.project_id,
+				input: get_record.input
 			})
 
 			repo.removeRecord(record_id);

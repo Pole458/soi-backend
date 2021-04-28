@@ -4,11 +4,12 @@ const testing = true;
 
 const loki = require('lokijs');
 
+const db = new loki("test.json");
 
 // Changes $loki to id and removes lokijs metadata
 const polish = (i) => {
 
-	if (!i) return null;
+	if(!i) return null;
 
 	const o = {}
 	for (const [key, value] of Object.entries(i)) {
@@ -21,40 +22,6 @@ const polish = (i) => {
 	return o;
 }
 
-const db = new loki(testing ? "db.json" : "test.json", {
-	autoload: !testing,
-	autoloadCallback: () => {
-
-		db.users = db.getCollection("users");
-		if (!db.users)
-			db.users = db.addCollection("users", {
-				unique: ['username'],
-				indices: ["username"]
-			});
-
-		db.projects = db.getCollection("projects");
-		if (!db.projects)
-			db.projects = db.addCollection("projects", {
-				unique: ["title"],
-				indices: ["title"]
-			});
-
-		db.records = db.getCollection("records");
-		if (!db.records)
-			db.records = db.addCollection("records", {
-				indices: ["project_id"]
-			});
-
-		db.eventsCollection = db.getCollection("events")
-		if (!db.eventsCollection)
-			db.eventsCollection = db.addCollection("events");
-
-		repo.init();
-	},
-	autosave: true,
-	autosaveInterval: 4000
-});
-
 /**
  * JSON object containing Repository helper methods.
  */
@@ -62,8 +29,25 @@ const repo = {};
 
 repo.init = () => {
 
-	if (testing)
+	db.users = db.addCollection("users", {
+		unique: ['username'],
+		indices: ["username"]
+	});
+
+	db.projects = db.addCollection("projects", {
+		unique: ["title"],
+		indices: ["title"]
+	});
+
+	db.records = db.addCollection("records", {
+		indices: ["project_id"]
+	});
+
+	db.events = db.addCollection("events");
+
+	if (testing) {
 		repo.fillForTesting();
+	}
 
 	console.debug("DB ready");
 }
@@ -73,6 +57,7 @@ repo.fillForTesting = () => {
 	const project_id = repo.insertProject("Pokemon").id;
 
 	const title2 = repo.insertProject("Giochi").id;
+	//console.log(title2);
 	//repo.removeProject(title2);
 
 	repo.addTagToProject(project_id, "Type");
@@ -136,7 +121,7 @@ repo.getUsers = () => {
 }
 
 repo.getEvents = () => {
-	return db.eventsCollection.chain().map(e => {
+	return db.events.chain().map(e => {
 		return {
 			id: e.$loki,
 			user_id: e.user_id,
@@ -155,9 +140,11 @@ repo.insertProject = (title) => {
 }
 
 repo.removeProject = (id) => {
+	//console.log(id);
 	db.projects.chain().find({
 		$loki: id
 	}).remove();
+
 }
 
 repo.getProject = (id) => {
@@ -247,12 +234,12 @@ repo.addTagValueToProject = (project_id, tag_name, tag_value) => {
 		for (const tag of project.tags) {
 			let b = true;
 			if (tag.name === tag_name) {
-				for (const value of tag.values) {
-					if (value === tag_value)
+				for(const value of tag.values){
+					if(value === tag_value)
 						b = false;
 				}
-
-				if (b)
+				
+				if(b)
 					tag.values.push(tag_value);
 
 				break;
@@ -376,7 +363,7 @@ repo.removeTagFromRecord = (record_id, tag_name) => {
 }
 
 repo.insertEvent = (user_id, action, info) => {
-	return polish(db.eventsCollection.insert({
+	return polish(db.events.insert({
 		user_id: user_id,
 		action: action,
 		info: info,
@@ -384,33 +371,36 @@ repo.insertEvent = (user_id, action, info) => {
 }
 
 repo.getEventsFromUserId = (user_id) => {
-	return db.eventsCollection.chain().find({
+	return db.events.chain().find({
 		user_id: user_id
 	}).map(e => {
 		const e2 = polish(e)
 		e2.date = e.meta.created
 		return e2
-	}).data({ removeMeta: true });
+	}).data( {removeMeta: true });
 }
 
 repo.getEventsFromProjectId = (project_id) => {
-	return db.eventsCollection.chain().find({
+	return db.events.chain().find({
 		"info.project_id": project_id
-	}).map(e => {
+	})	.map(e => {
 		const e2 = polish(e)
 		e2.date = e.meta.created
 		return e2
-	}).data({ removeMeta: true });
+	}).data( {removeMeta: true });
 }
 
 repo.getEventsFromRecordId = (record_id) => {
-	return db.eventsCollection.chain().find({
+	return db.events.chain().find({
 		"info.record_id": record_id
-	}).map(e => {
+	})	.map(e => {
 		const e2 = polish(e)
 		e2.date = e.meta.created
 		return e2
-	}).data({ removeMeta: true });
+	}).data( {removeMeta: true });
 }
+
+
+repo.init();
 
 module.exports = { repo };
