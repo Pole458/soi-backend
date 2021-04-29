@@ -1,6 +1,12 @@
 'use strict'
 
-const testing = true;
+const fs = require("fs")
+const mkdirp = require('mkdirp');
+const getDirName = require('path').dirname;
+const path = require('path')
+const mime = require('mime-types');
+
+const testing = false;
 
 const loki = require('lokijs');
 
@@ -21,7 +27,42 @@ const polish = (i) => {
 	return o;
 }
 
-const db = new loki(testing ? "db.json" : "test.json", {
+const imagePath = "images"
+
+function writeFileSyncRecursive(filename, content) {
+	// -- normalize path separator to '/' instead of path.sep, 
+	// -- as / works in node for Windows as well, and mixed \\ and / can appear in the path
+	let filepath = filename.replace(/\\/g, '/');
+
+	// -- preparation to allow absolute paths as well
+	let root = '';
+	if (filepath[0] === '/') {
+		root = '/';
+		filepath = filepath.slice(1);
+	}
+	else if (filepath[1] === ':') {
+		root = filepath.slice(0, 3);   // c:\
+		filepath = filepath.slice(3);
+	}
+
+	// -- create folders all the way down
+	const folders = filepath.split('/').slice(0, -1);  // remove last item, file
+	folders.reduce(
+		(acc, folder) => {
+			const folderPath = acc + folder + '/';
+			if (!fs.existsSync(folderPath)) {
+				fs.mkdirSync(folderPath);
+			}
+			return folderPath
+		},
+		root // first 'acc', important
+	);
+
+	// -- write file
+	fs.writeFileSync(root + filepath, content);
+}
+
+const db = new loki(testing ? "test.json" : "db.json", {
 	autoload: !testing,
 	autoloadCallback: () => {
 
@@ -51,7 +92,7 @@ const db = new loki(testing ? "db.json" : "test.json", {
 
 		repo.init();
 	},
-	autosave: true,
+	autosave: !testing,
 	autosaveInterval: 4000
 });
 
@@ -70,31 +111,31 @@ repo.init = () => {
 
 repo.fillForTesting = () => {
 
-	const project_id = repo.insertProject("Pokemon").id;
+	const project = repo.insertProject("Pokemon", "Text");
 
-	const title2 = repo.insertProject("Giochi").id;
+	const project2 = repo.insertProject("Giochi", "Text");
 	//repo.removeProject(title2);
 
-	repo.addTagToProject(project_id, "Type");
-	repo.addTagValueToProject(project_id, "Type", "Grass");
-	repo.addTagValueToProject(project_id, "Type", "Water");
-	repo.addTagValueToProject(project_id, "Type", "Fire");
+	repo.addTagToProject(project.id, "Type");
+	repo.addTagValueToProject(project.id, "Type", "Grass");
+	repo.addTagValueToProject(project.id, "Type", "Water");
+	repo.addTagValueToProject(project.id, "Type", "Fire");
 
-	repo.addTagToProject(project_id, "Region");
-	repo.addTagValueToProject(project_id, "Region", "Kanto");
+	repo.addTagToProject(project.id, "Region");
+	repo.addTagValueToProject(project.id, "Region", "Kanto");
 
 
-	repo.insertRecord(project_id, "Bulbasaur");
-	repo.insertRecord(project_id, "Charmander");
-	const record_id = repo.insertRecord(project_id, "Squirtle").id;
+	repo.insertRecord(project, "Bulbasaur");
+	repo.insertRecord(project, "Charmander");
+	const recordId = repo.insertRecord(project, "Squirtle").id;
 
-	repo.setTagToRecord(record_id, "Region", "Kanto");
-	repo.setTagToRecord(record_id, "Type", "Water");
+	repo.setTagToRecord(recordId, "Region", "Kanto");
+	repo.setTagToRecord(recordId, "Type", "Water");
 
 	//repo.removeTagFromProject(project_id, "Region");
 	//repo.removeTagValueFromProject(project_id, "Type", "Water")
 	//repo.removeTagFromRecord(record_id, "Type")
-	repo.modifyInputRecord(record_id, "Blastoise")
+	repo.modifyInputRecord(recordId, "Blastoise")
 }
 
 repo.isUserNameTaken = (username) => {
@@ -147,9 +188,10 @@ repo.getEvents = () => {
 	}).data({ removeMeta: true })
 }
 
-repo.insertProject = (title) => {
+repo.insertProject = (title, recordType) => {
 	return polish(db.projects.insert({
 		title: title,
+		recordType: recordType,
 		tags: [],
 	}));
 }
@@ -168,6 +210,7 @@ repo.getProject = (id) => {
 		return {
 			id: project.$loki,
 			title: project.title,
+			recordType: project.recordType,
 			tags: project.tags
 		}
 	}
@@ -289,12 +332,35 @@ repo.removeTagValueFromProject = (project_id, tag_name, tag_value) => {
 	})
 }
 
-repo.insertRecord = (project_id, input) => {
-	return polish(db.records.insert({
-		project_id: project_id,
-		input: input,
-		tags: []
-	}));
+repo.insertRecord = (project, input) => {
+
+	if (project.recordType === "Image") {
+
+		// Insert empty record to get id
+		const record_id = db.records.insert({
+			project_id: project.id,
+			input: null,
+			tags: []
+		}).$loki;
+
+		const fileName = "img_" + record_id + "." + mime.extension(input.mimetype);
+
+		// Create file from input
+		writeFileSyncRecursive("images/" + fileName, input.buffer);
+
+		// Update record to match filename
+		repo.modifyInputRecord(record_id, fileName);
+
+		// Return inserted record
+		return repo.getRecord(record_id);
+
+	} else {
+		return polish(db.records.insert({
+			project_id: project.id,
+			input: input,
+			tags: []
+		}));
+	}
 }
 
 repo.removeRecord = (record_id) => {
@@ -411,6 +477,10 @@ repo.getEventsFromRecordId = (record_id) => {
 		e2.date = e.meta.created
 		return e2
 	}).data({ removeMeta: true });
+}
+
+repo.getImagePath = (fileName) => {
+	return imagePath + "/" + fileName;
 }
 
 module.exports = { repo };
