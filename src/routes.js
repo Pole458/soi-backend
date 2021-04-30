@@ -559,19 +559,41 @@ function routes(app) {
 		resp.end();
 	})
 
-	app.post("/modify-record", checkAuth, (req, resp) => {
+	app.post("/record/:id/update", [checkAuth, upload.single("Image")], (req, resp) => {
 
-		const { input } = req.body;
-		const record_id = parseInt(req.body.record_id);
+		const record_id = parseInt(req.params.id);
 
-		repo.modifyInputRecord(record_id, input);
+		const record = repo.getRecord(record_id);
+
+		if (!record) {
+			resp.status(400);
+			resp.json({ error: "Please provide a valid record id" })
+			return;
+		}
+
+		const project = repo.getProject(record.project_id);
+
+		if (!project) {
+			resp.status(500);
+			resp.json({ error: "Record has not associated project" })
+			return;
+		}
+
+		let input;
+		if (project.recordType === "Image") {
+			input = req.file;
+		} else {
+			input = req.body.Text;
+		}
+
+		repo.updateInputRecord(record_id, input, project.recordType);
 
 		repo.insertEvent(resp.locals.id, "modified input of record", {
 			record_id: record_id
 		})
 
 		resp.status(200);
-		resp.end();
+		resp.json(repo.getRecord(record_id));
 	})
 
 	app.get("/events", checkAuth, (req, resp) => {

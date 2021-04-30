@@ -62,6 +62,12 @@ function writeFileSyncRecursive(filename, content) {
 	fs.writeFileSync(root + filepath, content);
 }
 
+const deleteFile = (fileName) => {
+	try {
+		fs.unlinkSync(fileName);
+	} catch (err) { }
+}
+
 const db = new loki(testing ? "test.json" : "db.json", {
 	autoload: !testing,
 	autoloadCallback: () => {
@@ -135,7 +141,7 @@ repo.fillForTesting = () => {
 	//repo.removeTagFromProject(project_id, "Region");
 	//repo.removeTagValueFromProject(project_id, "Type", "Water")
 	//repo.removeTagFromRecord(record_id, "Type")
-	repo.modifyInputRecord(recordId, "Blastoise")
+	repo.updateInputRecord(recordId, "Blastoise")
 }
 
 repo.isUserNameTaken = (username) => {
@@ -346,10 +352,10 @@ repo.insertRecord = (project, input) => {
 		const fileName = "img_" + record_id + "." + mime.extension(input.mimetype);
 
 		// Create file from input
-		writeFileSyncRecursive("images/" + fileName, input.buffer);
+		writeFileSyncRecursive(repo.getImagePath(fileName), input.buffer);
 
 		// Update record to match filename
-		repo.modifyInputRecord(record_id, fileName);
+		repo.updateInputRecord(record_id, fileName);
 
 		// Return inserted record
 		return repo.getRecord(record_id);
@@ -369,13 +375,38 @@ repo.removeRecord = (record_id) => {
 	}).remove();
 }
 
+repo.updateInputRecord = (record_id, input, recordType) => {
 
-repo.modifyInputRecord = (record_id, input) => {
-	db.records.chain().find({
-		$loki: record_id,
-	}, true).update(record => {
-		record.input = input;
-	})
+	if (recordType === "Image") {
+
+		const oldFileName = repo.getRecord(record_id).input;
+
+		const fileName = "img_" + record_id + "." + mime.extension(input.mimetype);
+
+		if (fileName !== oldFileName) {
+
+			// Delete old file in filesystem
+			deleteFile(repo.getImagePath(oldFileName));
+
+			// Update stored filename in db
+			db.records.chain().find({
+				$loki: record_id,
+			}, true).update(record => {
+				record.input = fileName;
+			})
+		}
+
+		// Update stored file in filesystem
+		writeFileSyncRecursive(repo.getImagePath(fileName), input.buffer);
+
+	} else {
+		// Update stored value in db
+		db.records.chain().find({
+			$loki: record_id,
+		}, true).update(record => {
+			record.input = input;
+		})
+	}
 }
 
 repo.getRecord = (id) => {
