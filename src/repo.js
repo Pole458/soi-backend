@@ -1,6 +1,9 @@
 'use strict'
 
-const testing = true;
+const fs = require("fs")
+const mime = require('mime-types');
+
+const testing = false;
 
 const loki = require('lokijs');
 
@@ -22,8 +25,83 @@ const polish = (i) => {
 	return o;
 }
 
+const imagePath = "images"
+
+function writeFileSyncRecursive(filename, content) {
+	// -- normalize path separator to '/' instead of path.sep, 
+	// -- as / works in node for Windows as well, and mixed \\ and / can appear in the path
+	let filepath = filename.replace(/\\/g, '/');
+
+	// -- preparation to allow absolute paths as well
+	let root = '';
+	if (filepath[0] === '/') {
+		root = '/';
+		filepath = filepath.slice(1);
+	}
+	else if (filepath[1] === ':') {
+		root = filepath.slice(0, 3);   // c:\
+		filepath = filepath.slice(3);
+	}
+
+	// -- create folders all the way down
+	const folders = filepath.split('/').slice(0, -1);  // remove last item, file
+	folders.reduce(
+		(acc, folder) => {
+			const folderPath = acc + folder + '/';
+			if (!fs.existsSync(folderPath)) {
+				fs.mkdirSync(folderPath);
+			}
+			return folderPath
+		},
+		root // first 'acc', important
+	);
+
+	// -- write file
+	fs.writeFileSync(root + filepath, content);
+}
+
+const deleteFile = (fileName) => {
+	try {
+		fs.unlinkSync(fileName);
+	} catch (err) { }
+}
+
+const db = new loki(testing ? "test.json" : "db.json", {
+	autoload: !testing,
+	autoloadCallback: () => {
+
+		db.users = db.getCollection("users");
+		if (!db.users)
+			db.users = db.addCollection("users", {
+				unique: ['username'],
+				indices: ["username"]
+			});
+
+		db.projects = db.getCollection("projects");
+		if (!db.projects)
+			db.projects = db.addCollection("projects", {
+				unique: ["title"],
+				indices: ["title"]
+			});
+
+		db.records = db.getCollection("records");
+		if (!db.records)
+			db.records = db.addCollection("records", {
+				indices: ["project_id"]
+			});
+
+		db.eventsCollection = db.getCollection("events")
+		if (!db.eventsCollection)
+			db.eventsCollection = db.addCollection("events");
+
+		repo.init();
+	},
+	autosave: !testing,
+	autosaveInterval: 4000
+});
+
 /**
- * JSON object containing Repository helper methods.
+ * JS object containing Repository helper methods.
  */
 const repo = {};
 
@@ -54,32 +132,32 @@ repo.init = () => {
 
 repo.fillForTesting = () => {
 
-	const project_id = repo.insertProject("Pokemon").id;
+	const project = repo.insertProject("Pokemon", "Text");
 
-	const title2 = repo.insertProject("Giochi").id;
-	//console.log(title2);
+
+	const project2 = repo.insertProject("Giochi", "Text");
 	//repo.removeProject(title2);
 
-	repo.addTagToProject(project_id, "Type");
-	repo.addTagValueToProject(project_id, "Type", "Grass");
-	repo.addTagValueToProject(project_id, "Type", "Water");
-	repo.addTagValueToProject(project_id, "Type", "Fire");
+	repo.addTagToProject(project.id, "Type");
+	repo.addTagValueToProject(project.id, "Type", "Grass");
+	repo.addTagValueToProject(project.id, "Type", "Water");
+	repo.addTagValueToProject(project.id, "Type", "Fire");
 
-	repo.addTagToProject(project_id, "Region");
-	repo.addTagValueToProject(project_id, "Region", "Kanto");
+	repo.addTagToProject(project.id, "Region");
+	repo.addTagValueToProject(project.id, "Region", "Kanto");
 
 
-	repo.insertRecord(project_id, "Bulbasaur");
-	repo.insertRecord(project_id, "Charmander");
-	const record_id = repo.insertRecord(project_id, "Squirtle").id;
+	repo.insertRecord(project, "Bulbasaur");
+	repo.insertRecord(project, "Charmander");
+	const recordId = repo.insertRecord(project, "Squirtle").id;
 
-	repo.setTagToRecord(record_id, "Region", "Kanto");
-	repo.setTagToRecord(record_id, "Type", "Water");
+	repo.setTagToRecord(recordId, "Region", "Kanto");
+	repo.setTagToRecord(recordId, "Type", "Water");
 
 	//repo.removeTagFromProject(project_id, "Region");
 	//repo.removeTagValueFromProject(project_id, "Type", "Water")
 	//repo.removeTagFromRecord(record_id, "Type")
-	repo.modifyInputRecord(record_id, "Blastoise")
+	repo.updateInputRecord(recordId, "Blastoise")
 }
 
 repo.isUserNameTaken = (username) => {
@@ -112,29 +190,36 @@ repo.getUser = (id) => {
 }
 
 repo.getUsers = () => {
-	return db.users.chain().map(user => {
-		return {
-			id: user.$loki,
-			username: user.username
-		}
-	}).data({ removeMeta: true });
+	return db.users.chain()
+		.simplesort("$loki")
+		.map(user => {
+			return {
+				id: user.$loki,
+				username: user.username
+			}
+		})
+		.data({ removeMeta: true });
 }
 
 repo.getEvents = () => {
-	return db.events.chain().map(e => {
-		return {
-			id: e.$loki,
-			user_id: e.user_id,
-			date: e.meta.created,
-			action: e.action,
-			info: e.info
-		}
-	}).data({ removeMeta: true })
+	return db.eventsCollection.chain()
+		.simplesort("$loki")
+		.map(e => {
+			return {
+				id: e.$loki,
+				user_id: e.user_id,
+				date: e.meta.created,
+				action: e.action,
+				info: e.info
+			}
+		})
+		.data({ removeMeta: true })
 }
 
-repo.insertProject = (title) => {
+repo.insertProject = (title, recordType) => {
 	return polish(db.projects.insert({
 		title: title,
+		recordType: recordType,
 		tags: [],
 	}));
 }
@@ -155,23 +240,12 @@ repo.getProject = (id) => {
 		return {
 			id: project.$loki,
 			title: project.title,
+			recordType: project.recordType,
 			tags: project.tags
 		}
 	}
 
 	return null;
-}
-
-repo.getProjectFromTitle = (title) => {
-	return db.projects.chain().findOne({
-		title: title
-	}).map(project => {
-		return {
-			id: project.$loki,
-			title: project.title,
-			tags: project.tags
-		}
-	}).data({ removeMeta: true });
 }
 
 repo.isProjectTitleTaken = (title) => {
@@ -180,14 +254,15 @@ repo.isProjectTitleTaken = (title) => {
 }
 
 repo.getProjects = () => {
-	return db.projects.chain().map(project => {
-		return {
-			id: project.$loki,
-			title: project.title
-		}
-	}).data({ removeMeta: true });
+	return db.projects.chain()
+		.simplesort("$loki")
+		.map(project => {
+			return {
+				id: project.$loki,
+				title: project.title
+			}
+		}).data({ removeMeta: true });
 }
-
 
 repo.addTagToProject = (project_id, tag_name) => {
 	db.projects.chain().find({
@@ -224,7 +299,6 @@ repo.removeTagFromProject = (project_id, tag_name) => {
 			}
 		}
 	})
-
 }
 
 repo.addTagValueToProject = (project_id, tag_name, tag_value) => {
@@ -276,12 +350,35 @@ repo.removeTagValueFromProject = (project_id, tag_name, tag_value) => {
 	})
 }
 
-repo.insertRecord = (project_id, input) => {
-	return polish(db.records.insert({
-		project_id: project_id,
-		input: input,
-		tags: []
-	}));
+repo.insertRecord = (project, input) => {
+
+	if (project.recordType === "Image") {
+
+		// Insert empty record to get id
+		const record_id = db.records.insert({
+			project_id: project.id,
+			input: null,
+			tags: []
+		}).$loki;
+
+		const fileName = "img_" + record_id + "." + mime.extension(input.mimetype);
+
+		// Create file from input
+		writeFileSyncRecursive(repo.getImagePath(fileName), input.buffer);
+
+		// Update record to match filename
+		repo.updateInputRecord(record_id, fileName);
+
+		// Return inserted record
+		return repo.getRecord(record_id);
+
+	} else {
+		return polish(db.records.insert({
+			project_id: project.id,
+			input: input,
+			tags: []
+		}));
+	}
 }
 
 repo.removeRecord = (record_id) => {
@@ -290,13 +387,38 @@ repo.removeRecord = (record_id) => {
 	}).remove();
 }
 
+repo.updateInputRecord = (record_id, input, recordType) => {
 
-repo.modifyInputRecord = (record_id, input) => {
-	db.records.chain().find({
-		$loki: record_id,
-	}, true).update(record => {
-		record.input = input;
-	})
+	if (recordType === "Image") {
+
+		const oldFileName = repo.getRecord(record_id).input;
+
+		const fileName = "img_" + record_id + "." + mime.extension(input.mimetype);
+
+		if (fileName !== oldFileName) {
+
+			// Delete old file in filesystem
+			deleteFile(repo.getImagePath(oldFileName));
+
+			// Update stored filename in db
+			db.records.chain().find({
+				$loki: record_id,
+			}, true).update(record => {
+				record.input = fileName;
+			})
+		}
+
+		// Update stored file in filesystem
+		writeFileSyncRecursive(repo.getImagePath(fileName), input.buffer);
+
+	} else {
+		// Update stored value in db
+		db.records.chain().find({
+			$loki: record_id,
+		}, true).update(record => {
+			record.input = input;
+		})
+	}
 }
 
 repo.getRecord = (id) => {
@@ -315,16 +437,20 @@ repo.getRecord = (id) => {
 }
 
 repo.getProjectRecords = (project_id) => {
-	return db.records.chain().find({
-		project_id: project_id
-	}).map(record => {
-		return {
-			id: record.$loki,
-			input: record.input,
-			project_id: record.project_id,
-			tags: record.tags
-		}
-	}).data({ removeMeta: true });
+	return db.records.chain()
+		.find({
+			project_id: project_id
+		})
+		.simplesort("$loki")
+		.map(record => {
+			return {
+				id: record.$loki,
+				input: record.input,
+				project_id: record.project_id,
+				tags: record.tags
+			}
+		})
+		.data({ removeMeta: true });
 }
 
 repo.setTagToRecord = (record_id, tag_name, tag_value) => {
@@ -371,33 +497,49 @@ repo.insertEvent = (user_id, action, info) => {
 }
 
 repo.getEventsFromUserId = (user_id) => {
-	return db.events.chain().find({
-		user_id: user_id
-	}).map(e => {
-		const e2 = polish(e)
-		e2.date = e.meta.created
-		return e2
-	}).data( {removeMeta: true });
+	return db.eventsCollection.chain()
+		.find({
+			user_id: user_id
+		})
+		.simplesort("$loki", true)
+		.map(e => {
+			const e2 = polish(e)
+			e2.date = e.meta.created
+			return e2
+		})
+		.data({ removeMeta: true });
 }
 
 repo.getEventsFromProjectId = (project_id) => {
-	return db.events.chain().find({
-		"info.project_id": project_id
-	})	.map(e => {
-		const e2 = polish(e)
-		e2.date = e.meta.created
-		return e2
-	}).data( {removeMeta: true });
+	return db.eventsCollection.chain()
+		.find({
+			"info.project_id": project_id
+		})
+		.simplesort("$loki", true)
+		.map(e => {
+			const e2 = polish(e)
+			e2.date = e.meta.created
+			return e2
+		})
+		.data({ removeMeta: true });
 }
 
 repo.getEventsFromRecordId = (record_id) => {
-	return db.events.chain().find({
-		"info.record_id": record_id
-	})	.map(e => {
-		const e2 = polish(e)
-		e2.date = e.meta.created
-		return e2
-	}).data( {removeMeta: true });
+	return db.eventsCollection.chain()
+		.find({
+			"info.record_id": record_id
+		})
+		.simplesort("$loki", true)
+		.map(e => {
+			const e2 = polish(e)
+			e2.date = e.meta.created
+			return e2
+		})
+		.data({ removeMeta: true });
+}
+
+repo.getImagePath = (fileName) => {
+	return imagePath + "/" + fileName;
 }
 
 

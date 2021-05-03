@@ -2,6 +2,8 @@
 
 const { repo } = require('./repo');
 const { sha256 } = require('crypto-hash');
+const multer = require('multer');
+const upload = multer();
 
 /**
  * Max age for a token (1 day).
@@ -362,7 +364,7 @@ function routes(app) {
 
 	app.post("/project", checkAuth, (req, resp) => {
 
-		const { title } = req.body;
+		const { title, recordType } = req.body;
 
 		// Check if a project with the same title already exists
 		if (repo.isProjectTitleTaken(title)) {
@@ -371,7 +373,13 @@ function routes(app) {
 			return;
 		}
 
-		const project = repo.insertProject(title);
+		if (recordType !== "Text" && recordType !== "Image") {
+			resp.status(400);
+			resp.json({ error: "Record type can only be Text or Image" })
+			return;
+		}
+
+		const project = repo.insertProject(title, recordType);
 
 		repo.insertEvent(resp.locals.id, "created project", {
 			project_id: project.id,
@@ -382,15 +390,35 @@ function routes(app) {
 		resp.json(project);
 	})
 
-	app.post("/record", checkAuth, (req, resp) => {
+	app.post("/project/:id/record", [checkAuth, upload.single("Image")], (req, resp) => {
 
-		const { input } = req.body;
-		const project_id = parseInt(req.body.project_id);
+		const project_id = parseInt(req.params.id);
 
-		const record = repo.insertRecord(project_id, input);
+		if (isNaN(project_id)) {
+			resp.status(400);
+			resp.json({ error: "Please provide a valid project id" })
+			return;
+		}
+
+		const project = repo.getProject(project_id);
+
+		if (!project) {
+			resp.status(400);
+			resp.json({ error: "Please provide a valid project id" })
+			return;
+		}
+
+		let input;
+		if (project.recordType === "Image") {
+			input = req.file;
+		} else {
+			input = req.body.Text;
+		}
+
+		const record = repo.insertRecord(project, input);
 
 		repo.insertEvent(resp.locals.id, "added record to project", {
-			project_id: project_id,
+			project_id: project.id,
 			record_id: record.id,
 			input: input
 		})
@@ -537,24 +565,55 @@ function routes(app) {
 		resp.end();
 	})
 
-	app.post("/modify-record", checkAuth, (req, resp) => {
+	app.post("/record/:id/update", [checkAuth, upload.single("Image")], (req, resp) => {
 
-		const { input } = req.body;
-		const record_id = parseInt(req.body.record_id);
+		const record_id = parseInt(req.params.id);
 
-		repo.modifyInputRecord(record_id, input);
+		const record = repo.getRecord(record_id);
+
+		if (!record) {
+			resp.status(400);
+			resp.json({ error: "Please provide a valid record id" })
+			return;
+		}
+
+		const project = repo.getProject(record.project_id);
+
+		if (!project) {
+			resp.status(500);
+			resp.json({ error: "Record has not associated project" })
+			return;
+		}
+
+		let input;
+		if (project.recordType === "Image") {
+			input = req.file;
+		} else {
+			input = req.body.Text;
+		}
+
+		repo.updateInputRecord(record_id, input, project.recordType);
 
 		repo.insertEvent(resp.locals.id, "modified input of record", {
 			record_id: record_id
 		})
 
 		resp.status(200);
-		resp.end();
+		resp.json(repo.getRecord(record_id));
 	})
 
 	app.get("/events", checkAuth, (req, resp) => {
 		resp.status(200);
 		resp.json(repo.getEvents());
+	})
+
+	app.get("/images/:filename/", (req, resp) => {
+
+		const filename = req.params.filename;
+
+		const path = repo.getImagePath(filename);
+
+		resp.sendFile(path, { root: __dirname + "/../" });
 	})
 }
 

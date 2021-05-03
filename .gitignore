@@ -55,3 +55,5 @@ Thumbs.db
 *.tar
 
 /keys/public.json
+db.json
+/images
