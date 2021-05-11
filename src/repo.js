@@ -7,7 +7,8 @@ const testing = false;
 
 const loki = require('lokijs');
 
-const db = new loki("test.json");
+
+//const db = new loki("test.json");
 
 // Changes $loki to id and removes lokijs metadata
 const polish = (i) => {
@@ -121,7 +122,7 @@ repo.init = () => {
 		indices: ["project_id"]
 	});
 
-	db.events = db.addCollection("events");
+	db.eventsCollection = db.addCollection("events");
 
 	if (testing) {
 		repo.fillForTesting();
@@ -489,7 +490,7 @@ repo.removeTagFromRecord = (record_id, tag_name) => {
 }
 
 repo.insertEvent = (user_id, action, info) => {
-	return polish(db.events.insert({
+	return polish(db.eventsCollection.insert({
 		user_id: user_id,
 		action: action,
 		info: info,
