@@ -114,11 +114,9 @@ const checkAuth = function (req, resp, next) {
 	const token = req.cookies.token;
 
 	if (!(checkToken(token))) {
-		// resp.status(401);
-		// resp.clearCookie("token");
-		// resp.json({ error: "Token is not valid" })
-
-		next();
+		resp.status(401);
+		resp.clearCookie("token");
+		resp.json({ error: "Token is not valid" })
 		return;
 	}
 
@@ -438,6 +436,28 @@ function routes(app) {
 		resp.json(record);
 	})
 
+	app.get('/project/:id/status', checkAuth, (req, resp) => {
+
+		const project_id = parseInt(req.params.id);
+
+		if (isNaN(project_id)) {
+			resp.status(400);
+			resp.json({ error: "Please provide a valid project id" })
+			return;
+		}
+
+		const project = repo.getProject(project_id);
+
+		if (!project) {
+			resp.status(400);
+			resp.json({ error: "Please provide a valid project id" })
+			return;
+		}
+
+		resp.status(200);
+		resp.json(repo.getProjectStatus(project_id));
+	})
+
 	app.post("/remove-project", checkAuth, (req, resp) => {
 
 		const project_id = parseInt(req.body.project_id);
@@ -653,7 +673,7 @@ function routes(app) {
 		resp.json(repo.getEvents());
 	})
 
-	app.get("/images/:filename/", (req, resp) => {
+	app.get("/images/:filename/", checkAuth, (req, resp) => {
 
 		const filename = req.params.filename;
 

@@ -10,7 +10,7 @@ const loki = require('lokijs');
 // Changes $loki to id and removes lokijs metadata
 const polish = (i) => {
 
-	if(!i) return null;
+	if (!i) return null;
 
 	const o = {}
 	for (const [key, value] of Object.entries(i)) {
@@ -93,6 +93,8 @@ const db = new loki(testing ? "test.json" : "db.json", {
 			db.eventsCollection = db.addCollection("events", {
 				indices: ['user_id', 'project_id', 'record_id']
 			});
+
+		repo.getProjectStatus(1);
 
 		repo.init();
 	},
@@ -294,12 +296,12 @@ repo.addTagValueToProject = (project_id, tag_name, tag_value) => {
 		for (const tag of project.tags) {
 			let b = true;
 			if (tag.name === tag_name) {
-				for(const value of tag.values){
-					if(value === tag_value)
+				for (const value of tag.values) {
+					if (value === tag_value)
 						b = false;
 				}
-				
-				if(b)
+
+				if (b)
 					tag.values.push(tag_value);
 
 				break;
@@ -474,7 +476,7 @@ repo.removeTagFromRecord = (record_id, tag_name) => {
 	})
 }
 
-repo.insertEvent = ({user_id, project_id, record_id, action, info}) => {
+repo.insertEvent = ({ user_id, project_id, record_id, action, info }) => {
 	return polish(db.eventsCollection.insert({
 		user_id: user_id,
 		project_id: project_id,
@@ -530,6 +532,49 @@ repo.getImagePath = (fileName) => {
 	return imagePath + "/" + fileName;
 }
 
+repo.getProjectStatus = (project_id) => {
+
+	const project = repo.getProject(project_id)
+
+	const projectStatus = {
+		title: project.title,
+		records: 0,
+		taggedRecords: 0,
+		tags: {}
+	}
+
+	projectStatus.tags = {}
+
+	project.tags.forEach(tag => {
+		projectStatus.tags[tag.name] = {
+			count: 0,
+			values: {}
+		}
+		tag.values.forEach(value => {
+			projectStatus.tags[tag.name].values[value] = 0
+		})
+	})
+
+	db.records.chain()
+		.find({
+			project_id: project_id
+		})
+		.data({ removeMeta: true })
+		.forEach(record => {
+			projectStatus.records += 1
+
+			if (record.tags.length > 0) {
+				projectStatus.taggedRecords += 1
+
+				record.tags.forEach(tag => {
+					projectStatus.tags[tag.name].count += 1
+					projectStatus.tags[tag.name].values[tag.value] += 1
+				})
+			}
+		})
+
+	return projectStatus
+}
 
 repo.init();
 
