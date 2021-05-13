@@ -162,7 +162,10 @@ function routes(app) {
 		repo.updateToken(token);
 
 		// Register event
-		repo.insertEvent(user_id, "signed in")
+		repo.insertEvent({
+			user_id: user_id,
+			action: "signed in"
+		})
 
 		resp.status(200);
 		setTokenCookie(resp, token);
@@ -381,9 +384,13 @@ function routes(app) {
 
 		const project = repo.insertProject(title, recordType);
 
-		repo.insertEvent(resp.locals.id, "created project", {
+		repo.insertEvent({
+			user_id: resp.locals.id,
 			project_id: project.id,
-			project_title: project.title
+			action: "created project",
+			info: {
+				project_title: project.title
+			}
 		})
 
 		resp.status(200);
@@ -417,10 +424,14 @@ function routes(app) {
 
 		const record = repo.insertRecord(project, input);
 
-		repo.insertEvent(resp.locals.id, "added record to project", {
+		repo.insertEvent({
+			user_id: resp.locals.id,
 			project_id: project.id,
-			record_id: record.id,
-			input: input
+			action: "added record to project",
+			info: {
+				record_id: record.id,
+				input: input
+			}
 		})
 
 		resp.status(200);
@@ -435,9 +446,13 @@ function routes(app) {
 
 		repo.removeProject(project_id);
 
-		repo.insertEvent(resp.locals.id, "deleted project", {
+		repo.insertEvent({
+			user_id: resp.locals.id,
 			project_id: project_id,
-			title: get_project.title
+			action: "deleted project",
+			info: {
+				title: get_project.title
+			}
 		})
 
 		resp.status(200);
@@ -453,10 +468,14 @@ function routes(app) {
 		const record = repo.getRecord(record_id)
 
 		if (record) {
-			repo.insertEvent(resp.locals.id, "deleted record", {
+			repo.insertEvent({
+				user_id: resp.locals.id,
 				record_id: record_id,
 				project_id: record.project_id,
-				input: get_record.input
+				action: "deleted record",
+				info: {
+					input: get_record.input
+				}
 			})
 
 			repo.removeRecord(record_id);
@@ -473,9 +492,14 @@ function routes(app) {
 
 		repo.addTagToProject(project_id, tag_name);
 
-		repo.insertEvent(resp.locals.id, "added tag to project", {
+		repo.insertEvent({
+			user_id: resp.locals.id,
+			action: "added tag to project",
 			project_id: project_id,
-			tag_name: tag_name
+			info:
+			{
+				tag_name: tag_name
+			}
 		})
 
 		resp.status(200);
@@ -489,10 +513,14 @@ function routes(app) {
 
 		repo.addTagValueToProject(project_id, tag_name, tag_value);
 
-		repo.insertEvent(resp.locals.id, "added value to project", {
+		repo.insertEvent({
+			user_id: resp.locals.id,
 			project_id: project_id,
-			tag_name: tag_name,
-			tag_value: tag_value
+			action: "added value to project",
+			info: {
+				tag_name: tag_name,
+				tag_value: tag_value
+			}
 		})
 
 		resp.status(200);
@@ -506,9 +534,13 @@ function routes(app) {
 
 		repo.removeTagFromProject(project_id, tag_name);
 
-		repo.insertEvent(resp.locals.id, "removed tag from project", {
+		repo.insertEvent({
+			user_id: resp.locals.id,
 			project_id: project_id,
-			tag_name: tag_name
+			action: "removed tag from project",
+			info: {
+				tag_name: tag_name
+			}
 		})
 
 		resp.status(200);
@@ -522,10 +554,14 @@ function routes(app) {
 
 		repo.removeTagValueFromProject(project_id, tag_name, tag_value);
 
-		repo.insertEvent(resp.locals.id, "removed tag value from project", {
+		repo.insertEvent({
+			user_id: resp.locals.id,
 			project_id: project_id,
-			tag_name: tag_name,
-			tag_value: tag_value
+			action: "removed tag value from project",
+			info: {
+				tag_name: tag_name,
+				tag_value: tag_value
+			}
 		})
 
 		resp.status(200);
@@ -539,10 +575,14 @@ function routes(app) {
 
 		repo.setTagToRecord(record_id, tag_name, tag_value);
 
-		repo.insertEvent(resp.locals.id, "set tag to record", {
+		repo.insertEvent({
+			user_id: resp.locals.id,
 			record_id: record_id,
-			tag_name: tag_name,
-			tag_value: tag_value
+			action: "set tag to record",
+			info: {
+				tag_name: tag_name,
+				tag_value: tag_value
+			}
 		})
 
 		resp.status(200);
@@ -556,9 +596,13 @@ function routes(app) {
 
 		repo.removeTagFromRecord(record_id, tag_name);
 
-		repo.insertEvent(resp.locals.id, "removed tag from record", {
+		repo.insertEvent({
+			user_id: resp.locals.id,
 			record_id: record_id,
-			tag_name: tag_name
+			action: "removed tag from record",
+			info: {
+				tag_name: tag_name
+			}
 		})
 
 		resp.status(200);
@@ -594,8 +638,10 @@ function routes(app) {
 
 		repo.updateInputRecord(record_id, input, project.recordType);
 
-		repo.insertEvent(resp.locals.id, "modified input of record", {
-			record_id: record_id
+		repo.insertEvent({
+			user_id: resp.locals.id,
+			record_id: record_id,
+			action: "modified input of record",
 		})
 
 		resp.status(200);

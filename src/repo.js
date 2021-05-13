@@ -7,9 +7,6 @@ const testing = false;
 
 const loki = require('lokijs');
 
-
-//const db = new loki("test.json");
-
 // Changes $loki to id and removes lokijs metadata
 const polish = (i) => {
 
@@ -93,7 +90,9 @@ const db = new loki(testing ? "test.json" : "db.json", {
 
 		db.eventsCollection = db.getCollection("events")
 		if (!db.eventsCollection)
-			db.eventsCollection = db.addCollection("events");
+			db.eventsCollection = db.addCollection("events", {
+				indices: ['user_id', 'project_id', 'record_id']
+			});
 
 		repo.init();
 	},
@@ -107,22 +106,6 @@ const db = new loki(testing ? "test.json" : "db.json", {
 const repo = {};
 
 repo.init = () => {
-
-	db.users = db.addCollection("users", {
-		unique: ['username'],
-		indices: ["username"]
-	});
-
-	db.projects = db.addCollection("projects", {
-		unique: ["title"],
-		indices: ["title"]
-	});
-
-	db.records = db.addCollection("records", {
-		indices: ["project_id"]
-	});
-
-	db.eventsCollection = db.addCollection("events");
 
 	if (testing) {
 		repo.fillForTesting();
@@ -209,6 +192,8 @@ repo.getEvents = () => {
 			return {
 				id: e.$loki,
 				user_id: e.user_id,
+				project_id: e.project_id,
+				record_id: e.record_id,
 				date: e.meta.created,
 				action: e.action,
 				info: e.info
@@ -489,9 +474,11 @@ repo.removeTagFromRecord = (record_id, tag_name) => {
 	})
 }
 
-repo.insertEvent = (user_id, action, info) => {
+repo.insertEvent = ({user_id, project_id, record_id, action, info}) => {
 	return polish(db.eventsCollection.insert({
 		user_id: user_id,
+		project_id: project_id,
+		record_id: record_id,
 		action: action,
 		info: info,
 	}));
@@ -514,7 +501,7 @@ repo.getEventsFromUserId = (user_id) => {
 repo.getEventsFromProjectId = (project_id) => {
 	return db.eventsCollection.chain()
 		.find({
-			"info.project_id": project_id
+			project_id: project_id
 		})
 		.simplesort("$loki", true)
 		.map(e => {
@@ -528,7 +515,7 @@ repo.getEventsFromProjectId = (project_id) => {
 repo.getEventsFromRecordId = (record_id) => {
 	return db.eventsCollection.chain()
 		.find({
-			"info.record_id": record_id
+			record_id: record_id
 		})
 		.simplesort("$loki", true)
 		.map(e => {
