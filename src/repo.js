@@ -534,7 +534,10 @@ repo.getImagePath = (fileName) => {
 
 repo.getProjectStatus = (project_id) => {
 
+
 	const project = repo.getProject(project_id)
+
+	if(project != null){
 
 	const projectStatus = {
 		title: project.title,
@@ -574,6 +577,7 @@ repo.getProjectStatus = (project_id) => {
 		})
 
 	return projectStatus
+	}
 }
 
 repo.init();
