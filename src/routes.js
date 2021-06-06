@@ -462,7 +462,19 @@ function routes(app) {
 
 		const project_id = parseInt(req.body.project_id);
 
-		const get_project = repo.getProject(project_id);
+		if (isNaN(project_id)) {
+			resp.status(400);
+			resp.json({ error: "Please provide a valid project id" })
+			return;
+		}
+
+		const project = repo.getProject(project_id);
+
+		// Remove all records associated with this project
+		const records = repo.getProjectRecords(project_id);
+		if(records) {
+			records.forEach(record => repo.removeRecord(record.id, project.recordType))
+		}
 
 		repo.removeProject(project_id);
 
@@ -471,7 +483,7 @@ function routes(app) {
 			project_id: project_id,
 			action: "deleted project",
 			info: {
-				title: get_project.title
+				title: project.title
 			}
 		})
 
@@ -483,23 +495,33 @@ function routes(app) {
 
 		const record_id = parseInt(req.body.record_id);
 
-		const get_record = repo.getRecord(record_id);
-
 		const record = repo.getRecord(record_id)
 
-		if (record) {
-			repo.insertEvent({
-				user_id: resp.locals.id,
-				record_id: record_id,
-				project_id: record.project_id,
-				action: "deleted record",
-				info: {
-					input: get_record.input
-				}
-			})
-
-			repo.removeRecord(record_id);
+		if (!record) {
+			resp.status(400);
+			resp.json({ error: "Please provide a valid record id" })
+			return;
 		}
+
+		const project = repo.getProject(record.project_id);
+
+		if (!project) {
+			resp.status(500);
+			resp.json({ error: "Record has no associated project" })
+			return;
+		}
+
+		repo.insertEvent({
+			user_id: resp.locals.id,
+			record_id: record_id,
+			project_id: record.project_id,
+			action: "deleted record",
+			info: {
+				input: record.input
+			}
+		})
+
+		repo.removeRecord(record_id, project.recordType);
 
 		resp.status(200);
 		resp.end();
@@ -645,7 +667,7 @@ function routes(app) {
 
 		if (!project) {
 			resp.status(500);
-			resp.json({ error: "Record has not associated project" })
+			resp.json({ error: "Record has no associated project" })
 			return;
 		}
 

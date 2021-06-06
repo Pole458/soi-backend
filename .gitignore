@@ -54,6 +54,8 @@ Thumbs.db
 *.tgz
 *.tar
 
-/keys/public.json
-db.json
-/images
+*.lokijs
+!example.lokijs
+
+images/*
+!*images/example

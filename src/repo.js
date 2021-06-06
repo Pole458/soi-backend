@@ -3,8 +3,6 @@
 const fs = require("fs")
 const mime = require('mime-types');
 
-const testing = false;
-
 const loki = require('lokijs');
 
 // Changes $loki to id and removes lokijs metadata
@@ -22,8 +20,6 @@ const polish = (i) => {
 
 	return o;
 }
-
-const imagePath = "images"
 
 function writeFileSyncRecursive(filename, content) {
 	// -- normalize path separator to '/' instead of path.sep, 
@@ -64,8 +60,14 @@ const deleteFile = (fileName) => {
 	} catch (err) { }
 }
 
-const db = new loki(testing ? "test.json" : "db.json", {
-	autoload: !testing,
+// Read database name from arguments
+var databaseName = process.argv.slice(2)[0]
+if(!databaseName) databaseName = "example";
+
+const imagePath = "images/" + databaseName + "/"
+
+const db = new loki(databaseName + '.lokijs', {
+	autoload: true,
 	autoloadCallback: () => {
 
 		db.users = db.getCollection("users");
@@ -93,12 +95,8 @@ const db = new loki(testing ? "test.json" : "db.json", {
 			db.eventsCollection = db.addCollection("events", {
 				indices: ['user_id', 'project_id', 'record_id']
 			});
-
-		repo.getProjectStatus(1);
-
-		repo.init();
 	},
-	autosave: !testing,
+	autosave: true,
 	autosaveInterval: 4000
 });
 
@@ -106,45 +104,6 @@ const db = new loki(testing ? "test.json" : "db.json", {
  * JS object containing Repository helper methods.
  */
 const repo = {};
-
-repo.init = () => {
-
-	if (testing) {
-		repo.fillForTesting();
-	}
-
-	console.debug("DB ready");
-}
-
-repo.fillForTesting = () => {
-
-	const project = repo.insertProject("Pokemon", "Text");
-
-
-	const project2 = repo.insertProject("Giochi", "Text");
-	//repo.removeProject(title2);
-
-	repo.addTagToProject(project.id, "Type");
-	repo.addTagValueToProject(project.id, "Type", "Grass");
-	repo.addTagValueToProject(project.id, "Type", "Water");
-	repo.addTagValueToProject(project.id, "Type", "Fire");
-
-	repo.addTagToProject(project.id, "Region");
-	repo.addTagValueToProject(project.id, "Region", "Kanto");
-
-
-	repo.insertRecord(project, "Bulbasaur");
-	repo.insertRecord(project, "Charmander");
-	const recordId = repo.insertRecord(project, "Squirtle").id;
-
-	repo.setTagToRecord(recordId, "Region", "Kanto");
-	repo.setTagToRecord(recordId, "Type", "Water");
-
-	//repo.removeTagFromProject(project_id, "Region");
-	//repo.removeTagValueFromProject(project_id, "Type", "Water")
-	//repo.removeTagFromRecord(record_id, "Type")
-	repo.updateInputRecord(recordId, "Blastoise")
-}
 
 repo.isUserNameTaken = (username) => {
 	const q = db.users.findOne({ username: username });
@@ -213,11 +172,9 @@ repo.insertProject = (title, recordType) => {
 }
 
 repo.removeProject = (id) => {
-	//console.log(id);
 	db.projects.chain().find({
 		$loki: id
 	}).remove();
-
 }
 
 repo.getProject = (id) => {
@@ -349,7 +306,7 @@ repo.insertRecord = (project, input) => {
 			tags: []
 		}).$loki;
 
-		const fileName = "img_" + record_id + "." + mime.extension(input.mimetype);
+		const fileName = "img_" + record_id + "_" + new Date().getTime() + "." + mime.extension(input.mimetype);
 
 		// Create file from input
 		writeFileSyncRecursive(repo.getImagePath(fileName), input.buffer);
@@ -369,7 +326,15 @@ repo.insertRecord = (project, input) => {
 	}
 }
 
-repo.removeRecord = (record_id) => {
+repo.removeRecord = (record_id, recordType) => {
+
+	if (recordType === "Image") {
+		const oldFileName = repo.getRecord(record_id).input;
+
+		// Delete old file in filesystem
+		deleteFile(repo.getImagePath(oldFileName));
+	}
+
 	db.records.chain().find({
 		$loki: record_id,
 	}).remove();
@@ -381,7 +346,7 @@ repo.updateInputRecord = (record_id, input, recordType) => {
 
 		const oldFileName = repo.getRecord(record_id).input;
 
-		const fileName = "img_" + record_id + "." + mime.extension(input.mimetype);
+		const fileName = "img_" + record_id + "_" + new Date().getTime() + "." + mime.extension(input.mimetype);
 
 		if (fileName !== oldFileName) {
 
@@ -529,11 +494,10 @@ repo.getEventsFromRecordId = (record_id) => {
 }
 
 repo.getImagePath = (fileName) => {
-	return imagePath + "/" + fileName;
+	return imagePath + fileName;
 }
 
 repo.getProjectStatus = (project_id) => {
-
 
 	const project = repo.getProject(project_id)
 
@@ -579,7 +543,5 @@ repo.getProjectStatus = (project_id) => {
 	return projectStatus
 	}
 }
-
-repo.init();
 
 module.exports = { repo };
